@@ -1,0 +1,9 @@
+context: kmp-omni-jg-jiahd
+contexts:
+    kmp-omni-jg-jiahd:
+        endpoints:
+            - https://omni.janncot.duckdns.org
+        auth:
+            siderov1:
+                identity: ferry133@gmail.com
+        cluster: jg-jiahd

@@ -1,7 +1,7 @@
 ---
 # -- The network CIDR for the nodes.
 # (REQUIRED) / (e.g. 192.168.1.0/24)
-node_cidr: ""
+node_cidr: 10.9.9.0/24
 
 # -- DNS servers to use for the cluster.
 #    (OPTIONAL) / (DEFAULT: ["1.1.1.1", "1.0.0.1"]) / (Cloudflare DNS)
@@ -21,7 +21,7 @@ node_cidr: ""
 
 # -- The IP address of the Kube API.
 #    (REQUIRED) / (NOTE: Choose an unused IP in node_cidr)
-cluster_api_addr: ""
+cluster_api_addr: 10.9.9.10
 
 # -- Additional SANs to add to the Kube API cert. This is useful if you want to call the Kube API by hostname rather than IP
 #    (OPTIONAL) / (e.g. ["mycluster.example.com"])
@@ -37,15 +37,15 @@ cluster_api_addr: ""
 
 # -- The Load balancer IP for k8s_gateway, this provides DNS to all your gateways when split DNS is configured on your internal DNS server (Dnsmasq, Pi-hole, etc)
 #    (REQUIRED) / (NOTE: Choose an unused IP in node_cidr)
-cluster_dns_gateway_addr: ""
+cluster_dns_gateway_addr: 10.9.9.11
 
 # -- The Load balancer IP for the internal gateway
 #    (REQUIRED) / (NOTE: Choose an unused IP in node_cidr)
-cluster_gateway_addr: ""
+cluster_gateway_addr: 10.9.9.12
 
 # -- GitHub repository
 #    (REQUIRED) / (e.g. "onedr0p/cluster-template")
-repository_name: ""
+repository_name: ferry133/jg-jiahd
 
 # -- GitHub repository branch
 #    (OPTIONAL) / (DEFAULT: "main")
@@ -57,15 +57,15 @@ repository_name: ""
 
 # -- Domain you wish to use from your Cloudflare account
 #    (REQUIRED) / (e.g. "example.com")
-cloudflare_domain: ""
+cloudflare_domain: jiahd.cc
 
 # -- API Token for Cloudflare with the 'Zone:DNS:Edit' and 'Account:Cloudflare Tunnel:Read' permissions
 #    (REQUIRED) (NOTE: See the README for information on creating this)
-cloudflare_token: ""
+cloudflare_token: ZJjBTrlas1_4NvGSOga8f1slTvzczUeluxz3uLuc
 
 # -- The Load balancer IP for the external gateway
 #    (REQUIRED) / (NOTE: Choose an unused IP in node_cidr)
-cloudflare_gateway_addr: ""
+cloudflare_gateway_addr: 10.9.9.13
 
 # -- The load balancer mode for cilium.
 #    (OPTIONAL) / (DEFAULT: "dsr") / (NOTE: accepted values are 'dsr' or 'snat') / (REF: https://docs.cilium.io/en/stable/network/kubernetes/kubeproxy-free/)

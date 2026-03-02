@@ -1,9 +1,0 @@
-context: kmp-omni-oc1
-contexts:
-    kmp-omni-oc1:
-        endpoints:
-            - https://omni.janncot.duckdns.org
-        auth:
-            siderov1:
-                identity: ferry133@gmail.com
-        cluster: oc1

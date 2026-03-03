@@ -33,6 +33,7 @@ cluster_api_addr: 10.9.9.10
 
 # -- The service CIDR for the cluster, this must NOT overlap with any existing networks and should be a /16 (64K IPs).
 #    (OPTIONAL) / (DEFAULT: "10.43.0.0/16")
+cluster_svc_cidr: "10.43.0.0/16"
 # cluster_svc_cidr: ""
 
 # -- The Load balancer IP for k8s_gateway, this provides DNS to all your gateways when split DNS is configured on your internal DNS server (Dnsmasq, Pi-hole, etc)

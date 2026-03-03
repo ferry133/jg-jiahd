@@ -133,7 +133,7 @@ class Plugin(makejinja.plugin.Plugin):
         data.setdefault('node_dns_servers', ['1.1.1.1', '1.0.0.1'])
         data.setdefault('node_ntp_servers', ['162.159.200.1', '162.159.200.123'])
         data.setdefault('cluster_pod_cidr', '10.42.0.0/16')
-        data.setdefault('cluster_svc_cidr', '10.43.0.0/16')
+        data.setdefault('cluster_svc_cidr', '10.96.0.0/16')
         data.setdefault('repository_branch', 'main')
         data.setdefault('repository_visibility', 'public')
         data.setdefault('cilium_loadbalancer_mode', 'dsr')

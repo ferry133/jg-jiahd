@@ -33,7 +33,7 @@ cluster_api_addr: 10.9.9.10
 
 # -- The service CIDR for the cluster, this must NOT overlap with any existing networks and should be a /16 (64K IPs).
 #    (OPTIONAL) / (DEFAULT: "10.43.0.0/16")
-cluster_svc_cidr: "10.96.0.0/16"
+cluster_svc_cidr: "10.96.0.0/16"      # Larry: align with omni default setting.
 # cluster_svc_cidr: ""
 
 # -- The Load balancer IP for k8s_gateway, this provides DNS to all your gateways when split DNS is configured on your internal DNS server (Dnsmasq, Pi-hole, etc)
@@ -62,7 +62,7 @@ cloudflare_domain: jiahd.cc
 
 # -- API Token for Cloudflare with the 'Zone:DNS:Edit' and 'Account:Cloudflare Tunnel:Read' permissions
 #    (REQUIRED) (NOTE: See the README for information on creating this)
-cloudflare_token: ZJjBTrlas1_4NvGSOga8f1slTvzczUeluxz3uLuc
+cloudflare_token: cgh_b8Gyv0BDYSK3LtGWFMzyWzHbL7hIinxJfn9M
 
 # -- The Load balancer IP for the external gateway
 #    (REQUIRED) / (NOTE: Choose an unused IP in node_cidr)

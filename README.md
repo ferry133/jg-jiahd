@@ -40,6 +40,7 @@ Using **enterprise NVMe or SATA SSDs on Bare Metal** (even used drives) provides
 
 These guidelines provide a strong baseline, but there are always exceptions and nuances. The best way to ensure your hardware configuration works is to **test it thoroughly and benchmark performance** under realistic workloads.
 
+
 ### Stage 2: Machine Preparation
 
 > [!IMPORTANT]
@@ -67,15 +68,14 @@ These guidelines provide a strong baseline, but there are always exceptions and 
 > [!TIP]
 > It is recommended to set the visibility of your repository to `Public` so you can easily request help if you get stuck.
 
-1. Create a new repository by clicking the green `Use this template` button at the top of this page, then clone the new repo you just created and `cd` into it. Alternatively you can use the [GitHub CLI](https://cli.github.com/) ...
+1. Create a new repository by clicking the green `Use this template` button at the top of this page, then clone the new repo you just created and `cd` into it. Alternatively you can us the [GitHub CLI](https://cli.github.com/) ...
 
     ```sh
     export REPONAME="home-ops"
-    gh repo create $REPONAME --template onedr0p/cluster-template --public --clone
-    cd $REPONAME
+    gh repo create $REPONAME --template onedr0p/cluster-template --disable-wiki --public --clone && cd $REPONAME
     ```
 
-2. **Install** the [Mise CLI](https://mise.jdx.dev/getting-started.html#installing-mise-cli) on your local workstation.
+2. **Install** the [Mise CLI](https://mise.jdx.dev/getting-started.html#installing-mise-cli) on your workstation.
 
 3. **Activate** Mise in your shell by following the [activation guide](https://mise.jdx.dev/getting-started.html#activate-mise).
 
@@ -91,7 +91,7 @@ These guidelines provide a strong baseline, but there are always exceptions and 
 
    📍 _**Having trouble compiling Python?** Try running `mise settings python.compile=0` and then run these commands again_
 
-5. Logout of the GitHub Container Registry as this may cause authorization problems in future steps when using the public registry:
+5. Logout of GitHub Container Registry (GHCR) as this may cause authorization problems when using the public registry:
 
     ```sh
     docker logout ghcr.io
@@ -101,7 +101,7 @@ These guidelines provide a strong baseline, but there are always exceptions and 
 ### Stage 4: Cloudflare configuration
 
 > [!WARNING]
-> If any of the commands fail with `command not found` or `unknown command` it means `mise` is either not installed, activated or it could be configured incorrectly.
+> If any of the commands fail with `command not found` or `unknown command` it means `mise` is either not install or configured incorrectly.
 
 1. Create a Cloudflare API token for use with cloudflared and external-dns by reviewing the official [documentation](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/) and following the instructions below.
 
@@ -150,7 +150,7 @@ These guidelines provide a strong baseline, but there are always exceptions and 
 ### Stage 6: Bootstrap Talos, Kubernetes, and Flux
 
 > [!WARNING]
-> It might take a while for the cluster to be setup (10+ minutes is normal). During which time you will see a variety of error messages like: "couldn't get current server API group list," "error: no matching resources found", etc. 'Ready' will remain "False" as no CNI is deployed yet. **This is normal.** If this step gets interrupted, e.g. by pressing <kbd>Ctrl</kbd> + <kbd>C</kbd>, you likely will need to [reset the cluster](#-reset) before trying again
+> It might take a while for the cluster to be setup (10+ minutes is normal). During which time you will see a variety of error messages like: "couldn't get current server API group list," "error: no matching resources found", etc. 'Ready' will remain "False" as no CNI is deployed yet. **This is a normal.** If this step gets interrupted, e.g. by pressing <kbd>Ctrl</kbd> + <kbd>C</kbd>, you likely will need to [reset the cluster](#-reset) before trying again
 
 1. Install Talos:
 
@@ -237,9 +237,9 @@ The `external-dns` application created in the `network` namespace will handle cr
 
 _... Nothing working? That is expected, this is DNS after all!_
 
-### 🪝 GitHub Webhook
+### 🪝 Github Webhook
 
-By default Flux will periodically check your git repository for changes. In-order to have Flux reconcile on `git push` you must configure GitHub to send `push` events to Flux.
+By default Flux will periodically check your git repository for changes. In-order to have Flux reconcile on `git push` you must configure Github to send `push` events to Flux.
 
 1. Obtain the webhook path:
 
@@ -255,7 +255,7 @@ By default Flux will periodically check your git repository for changes. In-orde
     https://flux-webhook.${cloudflare_domain}/hook/12ebd1e363c641dc3c2e430ecf3cee2b3c7a5ac9e1234506f6f5f3ce1230e123
     ```
 
-3. Navigate to the settings of your repository on GitHub, under "Settings/Webhooks" press the "Add webhook" button. Fill in the webhook URL and your token from `github-push-token.txt`, Content type: `application/json`, Events: Choose Just the push event, and save.
+3. Navigate to the settings of your repository on Github, under "Settings/Webhooks" press the "Add webhook" button. Fill in the webhook URL and your token from `github-push-token.txt`, Content type: `application/json`, Events: Choose Just the push event, and save.
 
 ## 💥 Reset
 
@@ -358,13 +358,13 @@ Below is a general guide on trying to debug an issue with an resource or applica
     kubectl -n <namespace> get pods -o wide
     ```
 
-3. Check the logs of the pod if it's there:
+3. Check the logs of the pod if its there:
 
     ```sh
     kubectl -n <namespace> logs <pod-name> -f
     ```
 
-4. If a resource exists, try to describe it to see what problems it might have:
+4. If a resource exists try to describe it to see what problems it might have:
 
     ```sh
     kubectl -n <namespace> describe <resource> <name>
@@ -417,7 +417,7 @@ This flexibility allows you to integrate seamlessly with a range of DNS solution
 
 ### Secrets
 
-SOPS is an excellent tool for managing secrets in a GitOps workflow. However, it can become cumbersome when rotating secrets or maintaining a single source of truth for secret items.
+SOPs is an excellent tool for managing secrets in a GitOps workflow. However, it can become cumbersome when rotating secrets or maintaining a single source of truth for secret items.
 
 For a more streamlined approach to those issues, consider [External Secrets](https://external-secrets.io/latest/). This tool allows you to move away from SOPs and leverage an external provider for managing your secrets. External Secrets supports a wide range of providers, from cloud-based solutions to self-hosted options.
 
@@ -425,11 +425,13 @@ For a more streamlined approach to those issues, consider [External Secrets](htt
 
 If your workloads require persistent storage with features like replication or connectivity to NFS, SMB, or iSCSI servers, there are several projects worth exploring:
 
-- [rook-ceph](https://github.com/rook/rook) / [longhorn](https://github.com/longhorn/longhorn) / [openebs](https://github.com/openebs/openebs)
+- [rook-ceph](https://github.com/rook/rook)
+- [longhorn](https://github.com/longhorn/longhorn)
+- [openebs](https://github.com/openebs/openebs)
 - [democratic-csi](https://github.com/democratic-csi/democratic-csi)
-- [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) / [csi-driver-smb](https://github.com/kubernetes-csi/csi-driver-smb)
+- [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs)
+- [csi-driver-smb](https://github.com/kubernetes-csi/csi-driver-smb)
 - [synology-csi](https://github.com/SynologyOpenSource/synology-csi)
-- [truenas-csi](https://github.com/truenas/truenas-csi) / [tns-csi](https://github.com/fenio/tns-csi)
 
 These tools offer a variety of solutions to meet your persistent storage needs, whether you’re using cloud-native or self-hosted infrastructures.
 
@@ -441,7 +443,7 @@ Community member [@whazor](https://github.com/whazor) created [Kubesearch](https
 
 ### Community
 
-- Make a post in this repository's GitHub [Discussions](https://github.com/onedr0p/cluster-template/discussions).
+- Make a post in this repository's Github [Discussions](https://github.com/onedr0p/cluster-template/discussions).
 - Start a thread in the `#support` or `#cluster-template` channels in the [Home Operations](https://discord.gg/home-operations) Discord server.
 
 ### GitHub Sponsors

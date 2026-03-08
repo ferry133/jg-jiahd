@@ -1,0 +1,9 @@
+context: kmp-omni-j4
+contexts:
+    kmp-omni-j4:
+        endpoints:
+            - https://omni.janncot.com
+        auth:
+            siderov1:
+                identity: ferry133@gmail.com
+        cluster: j4

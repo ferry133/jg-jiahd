@@ -118,11 +118,18 @@ These guidelines provide a strong baseline, but there are always exceptions and 
     cloudflared tunnel create --credentials-file cloudflare-tunnel.json kubernetes
     ```
 
+   - Above command will create `cloudflare-tunnel.json` file.
+
 ### Stage 5: Cluster configuration
 
 1. Generate the config files from the sample files:
     In the Omni GUI, https://omni.janncot.com, login your google account. Download the kubeconfig, talosconfig of your cluster from Omni home. Copy those 2 fille to ./config.gen forder.
     In the root folder, execute:
+    ```sh
+    task init
+    ```
+   - Above command will initial related files.
+   - you may execute next commands to get recommandations setting.
     ```sh
     ./config.gen/setconfig.sh
     ```

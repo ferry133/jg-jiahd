@@ -1,9 +1,9 @@
-context: jcom-jiahd
+context: jcom-jiahd1
 contexts:
-    jcom-jiahd:
+    jcom-jiahd1:
         endpoints:
             - https://omni.janncot.com
         auth:
             siderov1:
                 identity: ferry133@gmail.com
-        cluster: jiahd
+        cluster: jiahd1

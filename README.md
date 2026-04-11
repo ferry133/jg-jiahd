@@ -129,7 +129,7 @@ These guidelines provide a strong baseline, but there are always exceptions and 
     task init
     ```
    - Above command will initial related files.
-   - you may execute next commands to get recommandations setting.
+   - you may execute next commands to get recommandations setting. (option)
     ```sh
     ./config.gen/setconfig.sh
     ```

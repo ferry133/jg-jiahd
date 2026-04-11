@@ -4,10 +4,10 @@ clusterName: kubernetes
 talosVersion: "${talosVersion}"
 kubernetesVersion: "${kubernetesVersion}"
 
-endpoint: https://10.9.9.10:6443
+endpoint: https://10.9.9.2:6443
 additionalApiServerCertSans: &sans
   - "127.0.0.1"
-  - "10.9.9.10"
+  - "10.9.9.2"
 additionalMachineCertSans: *sans
 
 clusterPodNets: ["10.42.0.0/16"]
@@ -19,7 +19,7 @@ cniConfig:
 
 nodes:
   - hostname: "jg-0-0"
-    ipAddress: "10.9.9.126"
+    ipAddress: "10.9.9.157"
     installDisk: "/dev/nvme0n1"
     machineSpec:
       secureboot: false
@@ -30,13 +30,13 @@ nodes:
           hardwareAddr: "e0:51:d8:1c:52:5c"
         dhcp: false
         addresses:
-          - "10.9.9.126/24"
+          - "10.9.9.157/24"
         routes:
           - gateway: "10.9.9.1"
             network: 0.0.0.0/0
         mtu: 1500
         vip:
-          ip: "10.9.9.10"
+          ip: "10.9.9.2"
 
 # Global patches
 patches:

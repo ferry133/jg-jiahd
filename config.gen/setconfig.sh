@@ -4,8 +4,10 @@ cp ./config.gen/cloudflare-tunnel.json .
 
 #mkdir $PWD/talos
 #mkdir $PWD/talos/clusterconfig
+test -e $PWD/talos || mkdir $PWD/talos
+test -e $PWD/talos/clusterconfig || mkdir $PWD/talos/clusterconfig
 cp ./config.gen/*kubeconfig.yaml $KUBECONFIG
-#cp ./config.gen/*talosconfig.yaml $TALOSCONFIG
+cp ./config.gen/*talosconfig.yaml $TALOSCONFIG
 
 #cp ./config.gen/*kubeconfig.yaml ./kubeconfig
 #cp ./config.gen/*talosconfig.yaml ./talosconfig

@@ -1,0 +1,10 @@
+#############
+# Larry: under omni cluster, already adopts flannel cni and coredns. It's not easy to migrate flannel to cilium. So we just keep it to use flannel cni.
+# That is, we need to do:
+# 1) no need to execute: "task bootstrap:talos"
+# 2) before "task bootstrap:apps", need to:
+#   A) In this source code, search service cidr "10.43" which should be changed to 10.96. (Omni cluster uses 10.96 as default service cidr, while the default in kubeadm is 10.43)
+#   B) Disable cilium and coredns release inside ./bootstrap/helmfile.d/01-apps.yaml
+#   C) Disable ./cilium/ks.yaml & ./coredns/ks.yaml inside ./kubernetes/apps/kube-system/kustomization.yaml
+# 3) execute "task bootstrap:apps". Might need to re-execute several times until all the resources are applied successfully.
+#

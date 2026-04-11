@@ -8,7 +8,7 @@ components:
 
 resources:
   - ./namespace.yaml
-  - ./cilium/ks.yaml
-  - ./coredns/ks.yaml
+#  - ./cilium/ks.yaml                   # Larry: adopt the default cni, flannel, of OMNI kubernetes.
+#  - ./coredns/ks.yaml                  # Larry: adopt omni's default coredns.
   - ./metrics-server/ks.yaml
   - ./reloader/ks.yaml

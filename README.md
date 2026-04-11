@@ -1,4 +1,4 @@
-# ⛵ Cluster Template
+# ⛵ Cluster Template for Omni Kubernetes
 
 Welcome to my template designed for deploying a single Kubernetes cluster. Whether you're setting up a cluster at home on bare-metal or virtual machines (VMs), this project aims to simplify the process and make Kubernetes more accessible. This template is inspired by my personal [home-ops](https://github.com/onedr0p/home-ops) repository, providing a practical starting point for anyone interested in managing their own Kubernetes environment.
 
@@ -15,7 +15,7 @@ With this approach, you'll gain a solid foundation to build and manage your Kube
 A Kubernetes cluster deployed with [Talos Linux](https://github.com/siderolabs/talos) and an opinionated implementation of [Flux](https://github.com/fluxcd/flux2) using [GitHub](https://github.com/) as the Git provider, [sops](https://github.com/getsops/sops) to manage secrets and [cloudflared](https://github.com/cloudflare/cloudflared) to access applications external to your local network.
 
 - **Required:** Some knowledge of [Containers](https://opencontainers.org/), [YAML](https://noyaml.com/), [Git](https://git-scm.com/), and a **Cloudflare account** with a **domain**.
-- **Included components:** [flux](https://github.com/fluxcd/flux2), [cilium](https://github.com/cilium/cilium), [cert-manager](https://github.com/cert-manager/cert-manager), [spegel](https://github.com/spegel-org/spegel), [reloader](https://github.com/stakater/Reloader), [envoy-gateway](https://github.com/envoyproxy/gateway), [external-dns](https://github.com/kubernetes-sigs/external-dns) and [cloudflared](https://github.com/cloudflare/cloudflared).
+- **Included components:** [flux](https://github.com/fluxcd/flux2), [cert-manager](https://github.com/cert-manager/cert-manager), [spegel](https://github.com/spegel-org/spegel), [reloader](https://github.com/stakater/Reloader), [envoy-gateway](https://github.com/envoyproxy/gateway), [external-dns](https://github.com/kubernetes-sigs/external-dns) and [cloudflared](https://github.com/cloudflare/cloudflared).
 
 **Other features include:**
 
@@ -39,7 +39,6 @@ Using **enterprise NVMe or SATA SSDs on Bare Metal** (even used drives) provides
 **Proxmox with enterprise drives can work** for testing or carefully tuned production clusters, but it introduces additional layers of potential I/O contention — especially if consumer drives are used. Any **replicated storage** (e.g., Rook-Ceph, Longhorn) should always use **dedicated disks separate from control plane and etcd nodes** to ensure reliability. Worker nodes are more flexible, but risky configurations should still be avoided for stateful workloads to maintain cluster stability.
 
 These guidelines provide a strong baseline, but there are always exceptions and nuances. The best way to ensure your hardware configuration works is to **test it thoroughly and benchmark performance** under realistic workloads.
-
 
 ### Stage 2: Machine Preparation
 
@@ -68,14 +67,15 @@ These guidelines provide a strong baseline, but there are always exceptions and 
 > [!TIP]
 > It is recommended to set the visibility of your repository to `Public` so you can easily request help if you get stuck.
 
-1. Create a new repository by clicking the green `Use this template` button at the top of this page, then clone the new repo you just created and `cd` into it. Alternatively you can us the [GitHub CLI](https://cli.github.com/) ...
+1. Create a new repository by clicking the green `Use this template` button at the top of this page, then clone the new repo you just created and `cd` into it. Alternatively you can use the [GitHub CLI](https://cli.github.com/) ...
 
     ```sh
     export REPONAME="home-ops"
-    gh repo create $REPONAME --template onedr0p/cluster-template --disable-wiki --public --clone && cd $REPONAME
+    gh repo create $REPONAME --template onedr0p/cluster-template --public --clone
+    cd $REPONAME
     ```
 
-2. **Install** the [Mise CLI](https://mise.jdx.dev/getting-started.html#installing-mise-cli) on your workstation.
+2. **Install** the [Mise CLI](https://mise.jdx.dev/getting-started.html#installing-mise-cli) on your local workstation.
 
 3. **Activate** Mise in your shell by following the [activation guide](https://mise.jdx.dev/getting-started.html#activate-mise).
 
@@ -91,7 +91,7 @@ These guidelines provide a strong baseline, but there are always exceptions and 
 
    📍 _**Having trouble compiling Python?** Try running `mise settings python.compile=0` and then run these commands again_
 
-5. Logout of GitHub Container Registry (GHCR) as this may cause authorization problems when using the public registry:
+5. Logout of the GitHub Container Registry as this may cause authorization problems in future steps when using the public registry:
 
     ```sh
     docker logout ghcr.io
@@ -101,7 +101,7 @@ These guidelines provide a strong baseline, but there are always exceptions and 
 ### Stage 4: Cloudflare configuration
 
 > [!WARNING]
-> If any of the commands fail with `command not found` or `unknown command` it means `mise` is either not install or configured incorrectly.
+> If any of the commands fail with `command not found` or `unknown command` it means `mise` is either not installed, activated or it could be configured incorrectly.
 
 1. Create a Cloudflare API token for use with cloudflared and external-dns by reviewing the official [documentation](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/) and following the instructions below.
 
@@ -121,9 +121,10 @@ These guidelines provide a strong baseline, but there are always exceptions and 
 ### Stage 5: Cluster configuration
 
 1. Generate the config files from the sample files:
-
+    In the Omni GUI, https://omni.janncot.com, login your google account. Download the kubeconfig, talosconfig of your cluster from Omni home. Copy those 2 fille to ./config.gen forder.
+    In the root folder, execute:
     ```sh
-    task init
+    ./config.gen/setconfig.sh
     ```
 
 2. Fill out `cluster.yaml` and `nodes.yaml` configuration files using the comments in those file as a guide.
@@ -147,32 +148,18 @@ These guidelines provide a strong baseline, but there are always exceptions and 
 > [!TIP]
 > Using a **private repository**? Make sure to paste the public key from `github-deploy.key.pub` into the deploy keys section of your GitHub repository settings. This will make sure Flux has read/write access to your repository.
 
-### Stage 6: Bootstrap Talos, Kubernetes, and Flux
+### Stage 6: Bootstrap Base Applications (Flux, Cloudflare, Envoy,...)
 
 > [!WARNING]
-> It might take a while for the cluster to be setup (10+ minutes is normal). During which time you will see a variety of error messages like: "couldn't get current server API group list," "error: no matching resources found", etc. 'Ready' will remain "False" as no CNI is deployed yet. **This is a normal.** If this step gets interrupted, e.g. by pressing <kbd>Ctrl</kbd> + <kbd>C</kbd>, you likely will need to [reset the cluster](#-reset) before trying again
+> It might take a while for the cluster to be setup (10+ minutes is normal). During which time you will see a variety of error messages like: "couldn't get current server API group list," "error: no matching resources found", etc. 'Ready' will remain "False" as no CNI is deployed yet. **This is normal.** If this step gets interrupted, e.g. by pressing <kbd>Ctrl</kbd> + <kbd>C</kbd>, you likely will need to [reset the cluster](#-reset) before trying again
 
-1. Install Talos:
-
-    ```sh
-    task bootstrap:talos
-    ```
-
-2. Push your changes to git:
-
-    ```sh
-    git add -A
-    git commit -m "chore: add talhelper encrypted secret :lock:"
-    git push
-    ```
-
-3. Install cilium, coredns, spegel, flux and sync the cluster to the repository state:
+1. Install spegel, flux and sync the cluster to the repository state:
 
     ```sh
     task bootstrap:apps
     ```
 
-4. Watch the rollout of your cluster happen:
+2. Watch the rollout of your cluster happen:
 
     ```sh
     kubectl get pods --all-namespaces --watch
@@ -181,12 +168,6 @@ These guidelines provide a strong baseline, but there are always exceptions and 
 ## 📣 Post installation
 
 ### ✅ Verifications
-
-1. Check the status of Cilium:
-
-    ```sh
-    cilium status
-    ```
 
 2. Check the status of Flux and if the Flux resources are up-to-date and in a ready state:
 
@@ -237,9 +218,9 @@ The `external-dns` application created in the `network` namespace will handle cr
 
 _... Nothing working? That is expected, this is DNS after all!_
 
-### 🪝 Github Webhook
+### 🪝 GitHub Webhook
 
-By default Flux will periodically check your git repository for changes. In-order to have Flux reconcile on `git push` you must configure Github to send `push` events to Flux.
+By default Flux will periodically check your git repository for changes. In-order to have Flux reconcile on `git push` you must configure GitHub to send `push` events to Flux.
 
 1. Obtain the webhook path:
 
@@ -255,7 +236,7 @@ By default Flux will periodically check your git repository for changes. In-orde
     https://flux-webhook.${cloudflare_domain}/hook/12ebd1e363c641dc3c2e430ecf3cee2b3c7a5ac9e1234506f6f5f3ce1230e123
     ```
 
-3. Navigate to the settings of your repository on Github, under "Settings/Webhooks" press the "Add webhook" button. Fill in the webhook URL and your token from `github-push-token.txt`, Content type: `application/json`, Events: Choose Just the push event, and save.
+3. Navigate to the settings of your repository on GitHub, under "Settings/Webhooks" press the "Add webhook" button. Fill in the webhook URL and your token from `github-push-token.txt`, Content type: `application/json`, Events: Choose Just the push event, and save.
 
 ## 💥 Reset
 
@@ -358,13 +339,13 @@ Below is a general guide on trying to debug an issue with an resource or applica
     kubectl -n <namespace> get pods -o wide
     ```
 
-3. Check the logs of the pod if its there:
+3. Check the logs of the pod if it's there:
 
     ```sh
     kubectl -n <namespace> logs <pod-name> -f
     ```
 
-4. If a resource exists try to describe it to see what problems it might have:
+4. If a resource exists, try to describe it to see what problems it might have:
 
     ```sh
     kubectl -n <namespace> describe <resource> <name>
@@ -417,7 +398,7 @@ This flexibility allows you to integrate seamlessly with a range of DNS solution
 
 ### Secrets
 
-SOPs is an excellent tool for managing secrets in a GitOps workflow. However, it can become cumbersome when rotating secrets or maintaining a single source of truth for secret items.
+SOPS is an excellent tool for managing secrets in a GitOps workflow. However, it can become cumbersome when rotating secrets or maintaining a single source of truth for secret items.
 
 For a more streamlined approach to those issues, consider [External Secrets](https://external-secrets.io/latest/). This tool allows you to move away from SOPs and leverage an external provider for managing your secrets. External Secrets supports a wide range of providers, from cloud-based solutions to self-hosted options.
 
@@ -425,13 +406,11 @@ For a more streamlined approach to those issues, consider [External Secrets](htt
 
 If your workloads require persistent storage with features like replication or connectivity to NFS, SMB, or iSCSI servers, there are several projects worth exploring:
 
-- [rook-ceph](https://github.com/rook/rook)
-- [longhorn](https://github.com/longhorn/longhorn)
-- [openebs](https://github.com/openebs/openebs)
+- [rook-ceph](https://github.com/rook/rook) / [longhorn](https://github.com/longhorn/longhorn) / [openebs](https://github.com/openebs/openebs)
 - [democratic-csi](https://github.com/democratic-csi/democratic-csi)
-- [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs)
-- [csi-driver-smb](https://github.com/kubernetes-csi/csi-driver-smb)
+- [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) / [csi-driver-smb](https://github.com/kubernetes-csi/csi-driver-smb)
 - [synology-csi](https://github.com/SynologyOpenSource/synology-csi)
+- [truenas-csi](https://github.com/truenas/truenas-csi) / [tns-csi](https://github.com/fenio/tns-csi)
 
 These tools offer a variety of solutions to meet your persistent storage needs, whether you’re using cloud-native or self-hosted infrastructures.
 
@@ -443,27 +422,20 @@ Community member [@whazor](https://github.com/whazor) created [Kubesearch](https
 
 ### Community
 
-- Make a post in this repository's Github [Discussions](https://github.com/onedr0p/cluster-template/discussions).
+- Make a post in this repository's GitHub [Discussions](https://github.com/onedr0p/cluster-template/discussions).
 - Start a thread in the `#support` or `#cluster-template` channels in the [Home Operations](https://discord.gg/home-operations) Discord server.
 
-### GitHub Sponsors
+## 📺 Media
 
-If you're having difficulty with this project, can't find the answers you need through the community support options above, or simply want to show your appreciation while gaining deeper insights, I’m offering one-on-one paid support through GitHub Sponsors for a limited time. Payment and scheduling will be coordinated through [GitHub Sponsors](https://github.com/sponsors/onedr0p).
+Check out these videos below. If you find them helpful, a like and subscribe goes a long way!
 
-<details>
-
-<summary>Click to expand the details</summary>
-
-<br>
-
-- **Rate**: $50/hour (no longer than 2 hours / day).
-- **What’s Included**: Assistance with deployment, debugging, or answering questions related to this project.
-- **What to Expect**:
-  1. Sessions will focus on specific questions or issues you are facing.
-  2. I will provide guidance, explanations, and actionable steps to help resolve your concerns.
-  3. Support is limited to this project and does not extend to unrelated tools or custom feature development.
-
-</details>
+<a href="https://youtube.com/watch?v=aeUKOpeoiUs">
+  <img src="https://github.com/user-attachments/assets/2dab1c6f-7b27-4b94-a7ad-a6d9c5b17c78" alt="Youtube Video" width="300">
+</a>
+&nbsp;&nbsp;
+<a href="https://youtube.com/watch?v=hoi2GzvJUXM">
+  <img src="https://github.com/user-attachments/assets/5b939b90-0019-4515-b90c-321ffe7448cf" alt="Youtube Video" width="300">
+</a>
 
 ## 🙌 Related Projects
 

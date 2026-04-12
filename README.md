@@ -118,7 +118,7 @@ These guidelines provide a strong baseline, but there are always exceptions and 
     cloudflared tunnel create --credentials-file cloudflare-tunnel.json kubernetes
     ```
 
-   - Above command will create `cloudflare-tunnel.json` file.
+   - Above command will create `cloudflare-tunnel.json` file as well.
 
 ### Stage 5: Cluster configuration
 

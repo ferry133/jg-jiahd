@@ -62,7 +62,7 @@ cloudflare_domain: jiahd.cc
 
 # -- API Token for Cloudflare with the 'Zone:DNS:Edit' and 'Account:Cloudflare Tunnel:Read' permissions
 #    (REQUIRED) (NOTE: See the README for information on creating this)
-cloudflare_token: cfut_lawREDIIGVtVbsOH3SRBeH3gt3U8swnqLPE1I2CC71d45398
+cloudflare_token: cfut_l81gQc6f6Z9685Tw1UXRMeFQIhhYvuqmBHWpIgZx95c1a75a
 
 # -- The Load balancer IP for the external gateway
 #    (REQUIRED) / (NOTE: Choose an unused IP in node_cidr)

@@ -29,8 +29,9 @@ RUN ARCH=$(dpkg --print-architecture) && \
 # Install Claude Code globally
 RUN npm install -g @anthropic-ai/claude-code
 
-# Create non-root user for Claude Code
-RUN useradd -m -u 1000 -s /bin/bash claude && \
+# Rename the built-in node user (UID 1000) to claude
+RUN usermod -l claude -d /home/claude -m node && \
+    groupmod -n claude node && \
     mkdir -p /home/claude/workspace && \
     chown -R claude:claude /home/claude
 

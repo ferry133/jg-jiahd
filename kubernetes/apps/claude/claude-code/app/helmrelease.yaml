@@ -33,8 +33,7 @@ spec:
                 enabled: true
                 custom: true
                 spec:
-                  httpGet:
-                    path: /
+                  tcpSocket:
                     port: &port 7681
                   initialDelaySeconds: 15
                   periodSeconds: 30

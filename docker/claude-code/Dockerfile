@@ -36,9 +36,6 @@ USER claude
 ENV PATH="/home/claude/.local/bin:${PATH}"
 RUN curl -fsSL https://claude.ai/install.sh | bash
 
-# Disable auto-updater (container image handles versioning in K8s)
-RUN echo '{"env":{"DISABLE_AUTOUPDATER":"1"}}' > /home/claude/.claude/settings.json
-
 USER root
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

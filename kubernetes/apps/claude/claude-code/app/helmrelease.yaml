@@ -49,6 +49,21 @@ spec:
                 memory: 256Mi
               limits:
                 memory: 1Gi
+    persistence:
+      claude-config:
+        type: persistentVolumeClaim
+        storageClass: sc-nas
+        accessMode: ReadWriteOnce
+        size: 5Gi
+        globalMounts:
+          - path: /home/claude/.claude
+      claude-workspace:
+        type: persistentVolumeClaim
+        storageClass: sc-nas
+        accessMode: ReadWriteOnce
+        size: 20Gi
+        globalMounts:
+          - path: /home/claude/workspace
     defaultPodOptions:
       securityContext:
         runAsNonRoot: true

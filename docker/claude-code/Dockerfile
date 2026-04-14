@@ -26,9 +26,10 @@ RUN ARCH=$(dpkg --print-architecture) && \
       "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.${TTYD_ARCH}" && \
     chmod +x /usr/local/bin/ttyd
 
-# Create non-root user
+# Create non-root user and set correct ownership
 RUN useradd -m -u 1000 -s /bin/bash claude && \
-    mkdir -p /home/claude/workspace /home/claude/.claude
+    mkdir -p /home/claude/workspace /home/claude/.claude && \
+    chown -R claude:claude /home/claude
 
 # Install Claude Code as claude user (native installer → ~/.local/bin/claude)
 USER claude

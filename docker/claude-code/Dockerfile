@@ -1,4 +1,4 @@
-FROM node:22-slim
+FROM debian:12-slim
 
 LABEL org.opencontainers.image.source="https://github.com/ferry133/jg-jiahd"
 LABEL org.opencontainers.image.description="Claude Code CLI with ttyd web terminal"
@@ -26,15 +26,19 @@ RUN ARCH=$(dpkg --print-architecture) && \
       "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.${TTYD_ARCH}" && \
     chmod +x /usr/local/bin/ttyd
 
-# Install Claude Code globally
-RUN npm install -g @anthropic-ai/claude-code
+# Create non-root user
+RUN useradd -m -u 1000 -s /bin/bash claude && \
+    mkdir -p /home/claude/workspace /home/claude/.claude
 
-# Rename the built-in node user (UID 1000) to claude
-RUN usermod -l claude -d /home/claude -m node && \
-    groupmod -n claude node && \
-    mkdir -p /home/claude/workspace && \
-    chown -R claude:claude /home/claude
+# Install Claude Code as claude user (native installer → ~/.local/bin/claude)
+USER claude
+ENV PATH="/home/claude/.local/bin:${PATH}"
+RUN curl -fsSL https://claude.ai/install.sh | bash
 
+# Disable auto-updater (container image handles versioning in K8s)
+RUN echo '{"env":{"DISABLE_AUTOUPDATER":"1"}}' > /home/claude/.claude/settings.json
+
+USER root
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

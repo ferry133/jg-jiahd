@@ -61,7 +61,7 @@ spec:
             port: *port
     route:
       app:
-        hostnames: ["ai.${SECRET_DOMAIN}"]
+        hostnames: ["cc.${SECRET_DOMAIN}"]
         parentRefs:
           - name: envoy-external
             namespace: network

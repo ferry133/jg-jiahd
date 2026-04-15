@@ -18,4 +18,4 @@ if [ -n "${TTYD_CREDENTIAL}" ]; then
     TTYD_ARGS+=("--credential" "${TTYD_CREDENTIAL}")
 fi
 
-exec ttyd "${TTYD_ARGS[@]}" claude
+exec ttyd "${TTYD_ARGS[@]}" bash

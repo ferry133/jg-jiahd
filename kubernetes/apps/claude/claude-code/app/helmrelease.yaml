@@ -18,11 +18,6 @@ spec:
               repository: ghcr.io/ferry133/claude-code
               tag: latest
             env:
-              ANTHROPIC_API_KEY:
-                valueFrom:
-                  secretKeyRef:
-                    name: claude-code-secret
-                    key: ANTHROPIC_API_KEY
               TTYD_CREDENTIAL:
                 valueFrom:
                   secretKeyRef:

@@ -11,7 +11,6 @@ TTYD_ARGS=(
     "--port" "7681"
     "--writable"
     "--max-clients" "5"
-    "--title" "ClaudeCode"
     "--client-option" "copyOnSelect=false"
     "--client-option" "cursorBlink=true"
     "--client-option" "cursorStyle=block"

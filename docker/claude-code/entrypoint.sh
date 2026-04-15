@@ -11,6 +11,12 @@ TTYD_ARGS=(
     "--port" "7681"
     "--writable"
     "--max-clients" "5"
+    "--title" "Claude Code"
+    "--client-option" "copyOnSelect=false"
+    "--client-option" "cursorBlink=true"
+    "--client-option" "cursorStyle=block"
+    "--client-option" "fontSize=15"
+    "--client-option" "scrollback=5000"
 )
 
 # Enable basic auth if credentials are provided

@@ -11,7 +11,7 @@ TTYD_ARGS=(
     "--port" "7681"
     "--writable"
     "--max-clients" "5"
-    "--title" "Claude Code"
+    "--title" "ClaudeCode"
     "--client-option" "copyOnSelect=false"
     "--client-option" "cursorBlink=true"
     "--client-option" "cursorStyle=block"
@@ -24,4 +24,4 @@ if [ -n "${TTYD_CREDENTIAL}" ]; then
     TTYD_ARGS+=("--credential" "${TTYD_CREDENTIAL}")
 fi
 
-exec ttyd "${TTYD_ARGS[@]}" bash
+exec ttyd "${TTYD_ARGS[@]}" /bin/bash

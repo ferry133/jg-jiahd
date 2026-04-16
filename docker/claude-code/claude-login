@@ -1,49 +1,30 @@
 #!/bin/bash
 # claude-login: OAuth login helper for ttyd environments
 #
-# 'claude auth login' uses raw terminal input incompatible with ttyd.
-# This script captures the OAuth URL explicitly and uses bash 'read'
-# to accept the auth code, then forwards it to claude via a FIFO.
+# 'claude auth login' uses raw terminal input incompatible with ttyd,
+# making it impossible to type or paste the auth code. This script
+# starts claude auth login in the background with a FIFO for stdin,
+# then uses bash 'read' (fully compatible with ttyd) to accept the code.
 #
 # Usage: claude-login
 
-set -e
-
 FIFO=$(mktemp -u /tmp/claude-auth-XXXXXX)
-LOGFILE=$(mktemp /tmp/claude-auth-log-XXXXXX)
 mkfifo "$FIFO"
-trap 'rm -f "$FIFO" "$LOGFILE"' EXIT
+trap 'rm -f "$FIFO"; kill "$CLAUDE_PID" 2>/dev/null' EXIT
 
-echo "Starting Claude Code authentication..."
-echo ""
+# Start claude auth login in background; stdin from FIFO, stdout/stderr
+# go directly to terminal so the OAuth URL is visible
+BROWSER=/bin/true claude auth login < "$FIFO" &
+CLAUDE_PID=$!
 
-# Start claude auth login in background; capture output to log while
-# also displaying it live on the terminal
-BROWSER=/bin/true claude auth login < "$FIFO" 2>&1 | tee "$LOGFILE" &
-
-# Poll until the OAuth URL appears in the captured output
-URL=""
-for i in $(seq 1 40); do
-    URL=$(grep -o 'https://claude\.com/cai/oauth[^[:space:]]*' "$LOGFILE" 2>/dev/null | head -1)
-    [ -n "$URL" ] && break
-    sleep 0.5
-done
-
-if [ -z "$URL" ]; then
-    echo ""
-    echo "Error: OAuth URL did not appear within 20s. Scroll up to check."
-    exit 1
-fi
+# Wait for the URL to be printed on screen (appears in < 2s normally)
+sleep 4
 
 echo ""
-echo "╔══════════════════════════════════════════════════════╗"
-echo "║  Step 1: Open this URL in your browser to login     ║"
-echo "╚══════════════════════════════════════════════════════╝"
-echo "$URL"
-echo ""
-echo "╔══════════════════════════════════════════════════════╗"
-echo "║  Step 2: After login, paste the auth code below     ║"
-echo "╚══════════════════════════════════════════════════════╝"
+echo "══════════════════════════════════════════════════════"
+echo "  ↑  Copy the URL above and open it in your browser."
+echo "  After you authorize and get the code, paste below."
+echo "══════════════════════════════════════════════════════"
 printf "\033[1;32m▶ Auth code: \033[0m"
 IFS= read -r AUTH_CODE
 
@@ -55,8 +36,8 @@ fi
 # Forward code to waiting claude process via FIFO
 printf '%s\n' "$AUTH_CODE" > "$FIFO"
 
-# Wait for background processes to finish
-wait 2>/dev/null || true
+# Wait for claude to finish processing
+wait "$CLAUDE_PID" 2>/dev/null || true
 
 echo ""
-echo "✓ Login complete! Run: claude"
+echo "✓ Done! Run: claude"

@@ -7,6 +7,20 @@ if [ ! -f /home/claude/.claude/settings.json ]; then
     echo '{"env":{"DISABLE_AUTOUPDATER":"1"}}' > /home/claude/.claude/settings.json
 fi
 
+# Start D-Bus session daemon (required for Claude Code credential storage)
+if command -v dbus-daemon &>/dev/null && [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
+    DBUS_ADDR=$(dbus-daemon --session --fork --print-address 2>/dev/null)
+    if [ -n "$DBUS_ADDR" ]; then
+        export DBUS_SESSION_BUS_ADDRESS="$DBUS_ADDR"
+    fi
+fi
+
+# Start GNOME Keyring daemon (provides secret-service for Claude Code OAuth tokens)
+if command -v gnome-keyring-daemon &>/dev/null; then
+    eval $(printf '' | gnome-keyring-daemon --daemonize --unlock --components=secrets 2>/dev/null) || true
+    export GNOME_KEYRING_CONTROL SSH_AUTH_SOCK 2>/dev/null || true
+fi
+
 TTYD_ARGS=(
     "--port" "7681"
     "--writable"

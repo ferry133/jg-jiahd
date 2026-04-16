@@ -12,7 +12,13 @@ RUN apt-get update && apt-get install -y \
     openssh-client \
     procps \
     ca-certificates \
+    dbus \
+    libsecret-1-0 \
+    gnome-keyring \
     && rm -rf /var/lib/apt/lists/*
+
+# Create D-Bus machine-id (required for session bus)
+RUN mkdir -p /var/lib/dbus && dbus-uuidgen > /var/lib/dbus/machine-id
 
 # Install ttyd (web terminal)
 ARG TTYD_VERSION=1.7.7

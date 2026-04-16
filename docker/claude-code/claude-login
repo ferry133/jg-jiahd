@@ -1,0 +1,50 @@
+#!/bin/bash
+# claude-login: OAuth login helper for ttyd environments
+#
+# 'claude auth login' switches the terminal to a raw input mode that is
+# incompatible with ttyd, making it impossible to type or paste the auth
+# code. This script starts claude auth login in the background reading
+# from a FIFO, then uses bash's own 'read' command (which works fine in
+# ttyd) to accept the code and forward it through the FIFO.
+#
+# Usage: claude-login
+
+set -e
+
+FIFO=$(mktemp -u /tmp/claude-auth-XXXXXX)
+mkfifo "$FIFO"
+trap 'rm -f "$FIFO"' EXIT
+
+# Start claude auth login in background; it reads the code from the FIFO
+BROWSER=/bin/true claude auth login < "$FIFO" &
+CLAUDE_PID=$!
+
+# Wait for claude to print the OAuth URL (it reads stdin after printing URL)
+sleep 2
+
+echo ""
+echo "──────────────────────────────────────────────────────"
+echo " Open the URL above in your browser, complete login,"
+echo " then copy the authentication code and paste it below."
+echo "──────────────────────────────────────────────────────"
+printf "\033[1;32m▶ Auth code: \033[0m"
+IFS= read -r AUTH_CODE
+
+if [ -z "$AUTH_CODE" ]; then
+    echo "No code entered. Aborting."
+    kill "$CLAUDE_PID" 2>/dev/null
+    exit 1
+fi
+
+# Forward code to waiting claude process
+printf '%s\n' "$AUTH_CODE" > "$FIFO"
+
+# Wait for completion
+if wait "$CLAUDE_PID"; then
+    echo ""
+    echo "✓ Login successful! You can now run: claude"
+else
+    echo ""
+    echo "✗ Login failed. Please try again."
+    exit 1
+fi

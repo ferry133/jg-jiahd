@@ -1,23 +1,20 @@
 #!/usr/bin/expect -f
 # claude-login: OAuth login helper for ttyd environments
 #
-# Uses expect to spawn claude auth login inside a real pty so that
-# claude prints the OAuth URL (it suppresses output when stdin is not
-# a tty). The auth code is read from /dev/tty (the actual terminal)
-# bypassing the pty, which works fine with ttyd's bash read.
+# Spawns claude auth login in a real pty (so it prints the URL), then
+# reads the auth code from /dev/tty using bash-compatible input.
 #
 # Usage: claude-login
 
 set timeout 30
 log_user 1
 
-# Spawn claude inside a pty so it behaves interactively
 spawn env BROWSER=/bin/true claude auth login
 
-# Wait for the OAuth URL to appear
+# Wait for the OAuth URL to appear in pty output
 expect {
-    -re {https://claude\.com/cai/oauth/\S+} {
-        set url $expect_out(0,string)
+    -re {(https://claude\.com/cai/oauth/\S+)} {
+        set url $expect_out(1,string)
     }
     timeout {
         send_user "\nError: OAuth URL did not appear within 30s.\n"
@@ -29,26 +26,20 @@ expect {
     }
 }
 
-# Show URL prominently
+# Display URL prominently
 send_user "\n"
 send_user "╔══════════════════════════════════════════════════════╗\n"
 send_user "║  Step 1 — Open this URL in your browser:            ║\n"
 send_user "╚══════════════════════════════════════════════════════╝\n"
-send_user "$url\n"
-send_user "\n"
+send_user "$url\n\n"
 
-# Wait for the code prompt from claude
-expect {
-    -glob "*Paste code here*" { }
-    timeout {
-        send_user "Error: code prompt did not appear.\n"
-        exit 1
-    }
-}
+# Wait 2s for claude's "Paste code here" prompt to appear in the pty
+# (we don't match it — ANSI codes in the prompt make glob unreliable)
+after 2000
 
-# Read auth code from /dev/tty (the real terminal — works with ttyd)
+# Read auth code from /dev/tty (the real terminal — fully compatible with ttyd)
 send_user "╔══════════════════════════════════════════════════════╗\n"
-send_user "║  Step 2 — Paste your auth code below and press Enter ║\n"
+send_user "║  Step 2 — Paste your auth code below + Enter        ║\n"
 send_user "╚══════════════════════════════════════════════════════╝\n"
 send_user "▶ Auth code: "
 
@@ -56,10 +47,16 @@ set fd [open /dev/tty r]
 gets $fd code
 close $fd
 
-# Send code to the waiting claude process
+if {$code eq ""} {
+    send_user "No code entered. Aborting.\n"
+    exit 1
+}
+
+# Send code to the waiting claude process via pty
 send "$code\r"
 
-# Wait for completion
+# Wait for login confirmation
+set timeout 60
 expect {
     -glob "*Login successful*" {
         send_user "\n✓ Login successful! Run: claude\n"
@@ -68,6 +65,6 @@ expect {
         send_user "\n✓ Done. Run: claude\n"
     }
     timeout {
-        send_user "\nTimeout waiting for login confirmation.\n"
+        send_user "\nTimeout — run 'claude' to check if login succeeded.\n"
     }
 }

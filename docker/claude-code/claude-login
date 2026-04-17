@@ -1,47 +1,73 @@
-#!/bin/bash
+#!/usr/bin/expect -f
 # claude-login: OAuth login helper for ttyd environments
 #
-# 'claude auth login' uses raw terminal input incompatible with ttyd.
-# Root cause of previous versions: FIFO blocks the reader process on
-# open() until a writer also opens it, so claude never started.
-# Fix: open the write-end of the FIFO first (exec 3>FIFO), which
-# unblocks claude immediately. Code is sent later via fd 3.
+# Uses expect to spawn claude auth login inside a real pty so that
+# claude prints the OAuth URL (it suppresses output when stdin is not
+# a tty). The auth code is read from /dev/tty (the actual terminal)
+# bypassing the pty, which works fine with ttyd's bash read.
 #
 # Usage: claude-login
 
-FIFO=$(mktemp -u /tmp/claude-auth-XXXXXX)
-mkfifo "$FIFO"
+set timeout 30
+log_user 1
 
-# Open FIFO write-end NOW so the reader (claude) is not blocked on open()
-exec 3>"$FIFO"
-trap 'exec 3>&- 2>/dev/null; rm -f "$FIFO"; kill "$CLAUDE_PID" 2>/dev/null' EXIT
+# Spawn claude inside a pty so it behaves interactively
+spawn env BROWSER=/bin/true claude auth login
 
-# Start claude auth login; stdin from FIFO (already open → starts immediately)
-BROWSER=/bin/true claude auth login < "$FIFO" &
-CLAUDE_PID=$!
+# Wait for the OAuth URL to appear
+expect {
+    -re {https://claude\.com/cai/oauth/\S+} {
+        set url $expect_out(0,string)
+    }
+    timeout {
+        send_user "\nError: OAuth URL did not appear within 30s.\n"
+        exit 1
+    }
+    eof {
+        send_user "\nError: claude exited unexpectedly.\n"
+        exit 1
+    }
+}
 
-# Wait for the OAuth URL to be printed (appears in < 2s)
-sleep 4
+# Show URL prominently
+send_user "\n"
+send_user "╔══════════════════════════════════════════════════════╗\n"
+send_user "║  Step 1 — Open this URL in your browser:            ║\n"
+send_user "╚══════════════════════════════════════════════════════╝\n"
+send_user "$url\n"
+send_user "\n"
 
-echo ""
-echo "══════════════════════════════════════════════════════"
-echo "  ↑  Copy the URL above and open it in your browser."
-echo "  After you authorize and get the code, paste below."
-echo "══════════════════════════════════════════════════════"
-printf "\033[1;32m▶ Auth code: \033[0m"
-IFS= read -r AUTH_CODE
+# Wait for the code prompt from claude
+expect {
+    -glob "*Paste code here*" { }
+    timeout {
+        send_user "Error: code prompt did not appear.\n"
+        exit 1
+    }
+}
 
-if [ -z "$AUTH_CODE" ]; then
-    echo "No code entered. Aborting."
-    exit 1
-fi
+# Read auth code from /dev/tty (the real terminal — works with ttyd)
+send_user "╔══════════════════════════════════════════════════════╗\n"
+send_user "║  Step 2 — Paste your auth code below and press Enter ║\n"
+send_user "╚══════════════════════════════════════════════════════╝\n"
+send_user "▶ Auth code: "
 
-# Send code to waiting claude process via write-end of FIFO
-printf '%s\n' "$AUTH_CODE" >&3
-exec 3>&-
+set fd [open /dev/tty r]
+gets $fd code
+close $fd
 
-# Wait for claude to finish processing
-wait "$CLAUDE_PID" 2>/dev/null || true
+# Send code to the waiting claude process
+send "$code\r"
 
-echo ""
-echo "✓ Done! Run: claude"
+# Wait for completion
+expect {
+    -glob "*Login successful*" {
+        send_user "\n✓ Login successful! Run: claude\n"
+    }
+    eof {
+        send_user "\n✓ Done. Run: claude\n"
+    }
+    timeout {
+        send_user "\nTimeout waiting for login confirmation.\n"
+    }
+}

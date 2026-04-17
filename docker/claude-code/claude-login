@@ -1,23 +1,26 @@
 #!/bin/bash
 # claude-login: OAuth login helper for ttyd environments
 #
-# 'claude auth login' uses raw terminal input incompatible with ttyd,
-# making it impossible to type or paste the auth code. This script
-# starts claude auth login in the background with a FIFO for stdin,
-# then uses bash 'read' (fully compatible with ttyd) to accept the code.
+# 'claude auth login' uses raw terminal input incompatible with ttyd.
+# Root cause of previous versions: FIFO blocks the reader process on
+# open() until a writer also opens it, so claude never started.
+# Fix: open the write-end of the FIFO first (exec 3>FIFO), which
+# unblocks claude immediately. Code is sent later via fd 3.
 #
 # Usage: claude-login
 
 FIFO=$(mktemp -u /tmp/claude-auth-XXXXXX)
 mkfifo "$FIFO"
-trap 'rm -f "$FIFO"; kill "$CLAUDE_PID" 2>/dev/null' EXIT
 
-# Start claude auth login in background; stdin from FIFO, stdout/stderr
-# go directly to terminal so the OAuth URL is visible
+# Open FIFO write-end NOW so the reader (claude) is not blocked on open()
+exec 3>"$FIFO"
+trap 'exec 3>&- 2>/dev/null; rm -f "$FIFO"; kill "$CLAUDE_PID" 2>/dev/null' EXIT
+
+# Start claude auth login; stdin from FIFO (already open → starts immediately)
 BROWSER=/bin/true claude auth login < "$FIFO" &
 CLAUDE_PID=$!
 
-# Wait for the URL to be printed on screen (appears in < 2s normally)
+# Wait for the OAuth URL to be printed (appears in < 2s)
 sleep 4
 
 echo ""
@@ -33,8 +36,9 @@ if [ -z "$AUTH_CODE" ]; then
     exit 1
 fi
 
-# Forward code to waiting claude process via FIFO
-printf '%s\n' "$AUTH_CODE" > "$FIFO"
+# Send code to waiting claude process via write-end of FIFO
+printf '%s\n' "$AUTH_CODE" >&3
+exec 3>&-
 
 # Wait for claude to finish processing
 wait "$CLAUDE_PID" 2>/dev/null || true

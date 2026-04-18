@@ -1,70 +1,18 @@
-#!/usr/bin/expect -f
+#!/bin/bash
 # claude-login: OAuth login helper for ttyd environments
 #
-# Spawns claude auth login in a real pty (so it prints the URL), then
-# reads the auth code from /dev/tty using bash-compatible input.
+# Runs claude auth login directly in the user's terminal.
+# Claude will print the OAuth URL — open it in your browser,
+# authenticate, then paste the code when prompted.
 #
 # Usage: claude-login
 
-set timeout 30
-log_user 1
+printf '\n'
+printf '╔══════════════════════════════════════════════════════╗\n'
+printf '║  Claude Login — follow the steps below              ║\n'
+printf '╚══════════════════════════════════════════════════════╝\n'
+printf '  1. Copy the URL printed below into your browser\n'
+printf '  2. Authenticate with your Anthropic account\n'
+printf '  3. Paste the authorization code when prompted\n\n'
 
-spawn env BROWSER=/bin/true claude auth login
-
-# Wait for the OAuth URL to appear in pty output
-expect {
-    -re {(https://claude\.com/cai/oauth/\S+)} {
-        set url $expect_out(1,string)
-    }
-    timeout {
-        send_user "\nError: OAuth URL did not appear within 30s.\n"
-        exit 1
-    }
-    eof {
-        send_user "\nError: claude exited unexpectedly.\n"
-        exit 1
-    }
-}
-
-# Display URL prominently
-send_user "\n"
-send_user "╔══════════════════════════════════════════════════════╗\n"
-send_user "║  Step 1 — Open this URL in your browser:            ║\n"
-send_user "╚══════════════════════════════════════════════════════╝\n"
-send_user "$url\n\n"
-
-# Wait 2s for claude's "Paste code here" prompt to appear in the pty
-# (we don't match it — ANSI codes in the prompt make glob unreliable)
-after 2000
-
-# Read auth code from /dev/tty (the real terminal — fully compatible with ttyd)
-send_user "╔══════════════════════════════════════════════════════╗\n"
-send_user "║  Step 2 — Paste your auth code below + Enter        ║\n"
-send_user "╚══════════════════════════════════════════════════════╝\n"
-send_user "▶ Auth code: "
-
-set fd [open /dev/tty r]
-gets $fd code
-close $fd
-
-if {$code eq ""} {
-    send_user "No code entered. Aborting.\n"
-    exit 1
-}
-
-# Send code to the waiting claude process via pty
-send "$code\r"
-
-# Wait for login confirmation
-set timeout 60
-expect {
-    -glob "*Login successful*" {
-        send_user "\n✓ Login successful! Run: claude\n"
-    }
-    eof {
-        send_user "\n✓ Done. Run: claude\n"
-    }
-    timeout {
-        send_user "\nTimeout — run 'claude' to check if login succeeded.\n"
-    }
-}
+exec env BROWSER=/bin/true claude auth login

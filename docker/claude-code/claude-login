@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+"""
+claude-login: run `claude` in this terminal, converting OSC 8 hyperlinks
+to plain-text URLs displayed in a box — easy to select/copy in ttyd.
+
+OSC 8 format:  ESC ] 8 ; params ; url BEL  visible_text  ESC ] 8 ;; BEL
+"""
+import os, sys, re, pty, tty, select, signal, termios, fcntl
+
+# Matches OSC 8 with either BEL (\x07) or ST (\x1b\\) as terminator
+OSC8_RE = re.compile(
+    rb'\x1b\]8;[^;]*;([^\x07\x1b]*?)(?:\x07|\x1b\\)'  # opening tag — capture URL
+    rb'(.*?)'                                            # visible text
+    rb'\x1b\]8;;(?:\x07|\x1b\\)',                       # closing tag
+    re.DOTALL,
+)
+
+URL_LINE_RE = re.compile(rb'^https?://\S+$')
+
+BOX_WIDTH = 72
+
+def box_url(url: bytes) -> bytes:
+    top    = b'\r\n\xe2\x95\x94' + b'\xe2\x95\x90' * BOX_WIDTH + b'\xe2\x95\x97\r\n'
+    label  = b'\xe2\x95\x91  OAuth URL \xe2\x80\x94 select all & paste into your browser:\r\n'
+    middle = b'\xe2\x95\x91  ' + url + b'\r\n'
+    bottom = b'\xe2\x95\x9a' + b'\xe2\x95\x90' * BOX_WIDTH + b'\xe2\x95\x9d\r\n\r\n'
+    return top + label + middle + bottom
+
+def filter_osc8(data: bytes) -> bytes:
+    def repl(m):
+        url, text = m.group(1).strip(), m.group(2)
+        if url and url.lower().startswith(b'http'):
+            return box_url(url) + text
+        return text
+    return OSC8_RE.sub(repl, data)
+
+def copy_winsize(src: int, dst: int):
+    try:
+        ws = fcntl.ioctl(src, termios.TIOCGWINSZ, b'\x00' * 8)
+        fcntl.ioctl(dst, termios.TIOCSWINSZ, ws)
+    except OSError:
+        pass
+
+master_fd, slave_fd = pty.openpty()
+copy_winsize(sys.stdout.fileno(), master_fd)
+
+pid = os.fork()
+if pid == 0:
+    os.close(master_fd)
+    os.setsid()
+    fcntl.ioctl(slave_fd, termios.TIOCSCTTY, 0)
+    for fd in range(3):
+        os.dup2(slave_fd, fd)
+    os.close(slave_fd)
+    os.execvpe('claude', ['claude'], os.environ)
+    sys.exit(1)
+
+os.close(slave_fd)
+
+def on_winch(_sig, _frame):
+    copy_winsize(sys.stdout.fileno(), master_fd)
+    os.kill(pid, signal.SIGWINCH)
+
+signal.signal(signal.SIGWINCH, on_winch)
+
+stdin_fd = sys.stdin.fileno()
+old_attrs = termios.tcgetattr(stdin_fd)
+tty.setraw(stdin_fd)
+
+try:
+    while True:
+        try:
+            rfds, _, _ = select.select([master_fd, stdin_fd], [], [], 0.05)
+        except (ValueError, OSError):
+            break
+        if master_fd in rfds:
+            try:
+                chunk = os.read(master_fd, 4096)
+            except OSError:
+                break
+            if not chunk:
+                break
+            os.write(sys.stdout.fileno(), filter_osc8(chunk))
+        if stdin_fd in rfds:
+            try:
+                data = os.read(stdin_fd, 4096)
+                if data:
+                    os.write(master_fd, data)
+            except OSError:
+                break
+finally:
+    termios.tcsetattr(stdin_fd, termios.TCSADRAIN, old_attrs)
+    try:
+        os.waitpid(pid, 0)
+    except ChildProcessError:
+        pass

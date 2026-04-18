@@ -60,18 +60,27 @@ if {$code eq ""} {
 }
 
 # Send code to the waiting claude process via pty
-send_user "Sending code to claude…\n"
+send_user "DEBUG: spawn_id=$spawn_id code_len=[string length $code]\n"
 send "$code\r"
-send_user "Waiting for claude to complete the OAuth exchange (may take ~30s)…\n"
+send_user "DEBUG: send done — waiting 10s for any claude output…\n"
 
-# Wait up to 5 minutes for claude to finish; log_user 1 (set above) will
-# print any output claude produces so we can see what it says.
-set timeout 300
+# Short diagnostic window: see what claude outputs immediately after receiving the code
+set timeout 10
 expect {
+    -re {(.+)} {
+        send_user "DEBUG: claude said: $expect_out(1,string)\n"
+        # Keep waiting for eof/more output
+        set timeout 300
+        expect {
+            eof { send_user "\n✓ Done. Run: claude\n" }
+            timeout { send_user "\nTimed out. Run: claude to check status.\n" }
+        }
+    }
     eof {
-        send_user "\n✓ Done. Run: claude\n"
+        send_user "\n✓ Done (immediate eof). Run: claude\n"
     }
     timeout {
-        send_user "\nTimed out after 5 minutes. Run: claude to check status.\n"
+        send_user "DEBUG: no output from claude in 10s — exchange is hanging or send failed.\n"
+        send_user "Run: curl -sv https://platform.claude.com/ to check OAuth endpoint connectivity.\n"
     }
 }

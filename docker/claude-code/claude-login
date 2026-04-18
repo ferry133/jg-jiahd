@@ -51,6 +51,9 @@ set fd [open /dev/tty r]
 gets $fd code
 close $fd
 
+# Strip all whitespace (trailing spaces/CR from browser paste in ttyd)
+set code [string trim $code]
+
 if {$code eq ""} {
     send_user "No code entered. Aborting.\n"
     exit 1
@@ -59,20 +62,7 @@ if {$code eq ""} {
 # Send code to the waiting claude process via pty
 send "$code\r"
 
-# Wait for login confirmation
-# Claude may print various success messages with ANSI color codes, or simply exit (eof)
-set timeout 120
-expect {
-    -re {[Ll]ogg?ed.{0,10}[Ii]n} {
-        send_user "\n✓ Login successful! Run: claude\n"
-    }
-    -re {[Ss]uccess} {
-        send_user "\n✓ Login successful! Run: claude\n"
-    }
-    eof {
-        send_user "\n✓ Done. Run: claude\n"
-    }
-    timeout {
-        send_user "\nTimeout — run 'claude' to check if login succeeded.\n"
-    }
-}
+# Hand the terminal directly to claude so the user sees its full output
+# and claude can handle any follow-up prompts naturally.
+# When claude exits, interact returns and the script ends.
+interact

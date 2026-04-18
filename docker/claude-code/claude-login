@@ -1,4 +1,0 @@
-#!/bin/bash
-# claude-login: launch claude, which handles OAuth login natively in its TUI.
-# The TUI shows the auth URL and accepts the paste code directly.
-exec claude

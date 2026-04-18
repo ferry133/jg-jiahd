@@ -15,7 +15,6 @@ RUN apt-get update && apt-get install -y \
     dbus \
     libsecret-1-0 \
     gnome-keyring \
-    expect \
     && rm -rf /var/lib/apt/lists/*
 
 # Create D-Bus machine-id (required for session bus)
@@ -46,10 +45,6 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 USER root
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
-
-# Add login helper (works around ttyd input compatibility issue)
-COPY claude-login /usr/local/bin/claude-login
-RUN chmod +x /usr/local/bin/claude-login
 
 USER claude
 WORKDIR /home/claude/workspace

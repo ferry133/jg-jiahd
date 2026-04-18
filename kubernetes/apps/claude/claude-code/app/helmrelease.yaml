@@ -2,7 +2,7 @@
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
-  name: claude-code
+  name: trello
 spec:
   chartRef:
     kind: OCIRepository
@@ -10,7 +10,7 @@ spec:
   interval: 1h
   values:
     controllers:
-      claude-code:
+      trello:
         strategy: Recreate
         containers:
           app:
@@ -71,7 +71,89 @@ spec:
             port: *port
     route:
       app:
-        hostnames: ["cc.${SECRET_DOMAIN}"]
+        hostnames: ["trello.${SECRET_DOMAIN}"]
+        parentRefs:
+          - name: envoy-external
+            namespace: network
+            sectionName: https
+        rules:
+          - backendRefs:
+              - identifier: app
+                port: *port
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: line
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: claude-code
+  interval: 1h
+  values:
+    controllers:
+      line:
+        strategy: Recreate
+        containers:
+          app:
+            image:
+              repository: ghcr.io/ferry133/claude-code
+              tag: latest
+            env:
+              TTYD_CREDENTIAL:
+                valueFrom:
+                  secretKeyRef:
+                    name: claude-code-secret
+                    key: TTYD_CREDENTIAL
+            probes:
+              liveness: &probes
+                enabled: true
+                custom: true
+                spec:
+                  tcpSocket:
+                    port: &port 7681
+                  initialDelaySeconds: 15
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+              readiness: *probes
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 1Gi
+    persistence:
+      claude-config:
+        type: persistentVolumeClaim
+        storageClass: sc-nas
+        accessMode: ReadWriteOnce
+        size: 5Gi
+        globalMounts:
+          - path: /home/claude/.claude
+      claude-workspace:
+        type: persistentVolumeClaim
+        storageClass: sc-nas
+        accessMode: ReadWriteOnce
+        size: 20Gi
+        globalMounts:
+          - path: /home/claude/workspace
+    defaultPodOptions:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+    service:
+      app:
+        ports:
+          http:
+            port: *port
+    route:
+      app:
+        hostnames: ["line.${SECRET_DOMAIN}"]
         parentRefs:
           - name: envoy-external
             namespace: network

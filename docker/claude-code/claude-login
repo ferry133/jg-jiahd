@@ -60,9 +60,13 @@ if {$code eq ""} {
 send "$code\r"
 
 # Wait for login confirmation
-set timeout 60
+# Claude may print various success messages with ANSI color codes, or simply exit (eof)
+set timeout 120
 expect {
-    -glob "*Login successful*" {
+    -re {[Ll]ogg?ed.{0,10}[Ii]n} {
+        send_user "\n✓ Login successful! Run: claude\n"
+    }
+    -re {[Ss]uccess} {
         send_user "\n✓ Login successful! Run: claude\n"
     }
     eof {

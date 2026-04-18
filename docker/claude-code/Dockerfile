@@ -46,8 +46,8 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 USER root
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
-COPY claude-login /usr/local/bin/claude-login
-RUN chmod +x /usr/local/bin/claude-login
+# COPY claude-login /usr/local/bin/claude-login
+# RUN chmod +x /usr/local/bin/claude-login
 
 USER claude
 WORKDIR /home/claude/workspace

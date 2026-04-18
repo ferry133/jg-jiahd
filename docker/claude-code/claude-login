@@ -60,9 +60,18 @@ if {$code eq ""} {
 }
 
 # Send code to the waiting claude process via pty
+send_user "Sending code to claude…\n"
 send "$code\r"
+send_user "Waiting for claude to complete the OAuth exchange (may take ~30s)…\n"
 
-# Hand the terminal directly to claude so the user sees its full output
-# and claude can handle any follow-up prompts naturally.
-# When claude exits, interact returns and the script ends.
-interact
+# Wait up to 5 minutes for claude to finish; log_user 1 (set above) will
+# print any output claude produces so we can see what it says.
+set timeout 300
+expect {
+    eof {
+        send_user "\n✓ Done. Run: claude\n"
+    }
+    timeout {
+        send_user "\nTimed out after 5 minutes. Run: claude to check status.\n"
+    }
+}

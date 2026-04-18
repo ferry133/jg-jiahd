@@ -15,7 +15,6 @@ RUN apt-get update && apt-get install -y \
     dbus \
     libsecret-1-0 \
     gnome-keyring \
-    python3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create D-Bus machine-id (required for session bus)

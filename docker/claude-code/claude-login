@@ -1,98 +1,16 @@
-#!/usr/bin/env python3
-"""
-claude-login: runs `claude` in a wide virtual pty (≥600 cols) so the OAuth URL
-is never hard-wrapped by the Node.js TUI. Every https:// URL in the output is
-re-wrapped in an OSC 8 hyperlink so xterm.js treats it as one clickable entity
-— even when it visually wraps across multiple lines in the browser terminal.
-"""
-import os, sys, re, pty, tty, select, signal, termios, fcntl, struct
+#!/bin/bash
+# claude-login: OAuth login helper for ttyd web terminal
+#
+# Runs the full claude TUI which handles login natively.
+# When the OAuth URL appears, press  c  to copy it to clipboard.
 
-# Wide enough that the OAuth URL (~380 chars) stays on a single line
-MIN_COLS = 600
+printf '\n'
+printf '╔══════════════════════════════════════════════════════════════╗\n'
+printf '║  Claude Login                                               ║\n'
+printf '╠══════════════════════════════════════════════════════════════╣\n'
+printf '║  1. When the URL appears, press  c  to copy it              ║\n'
+printf '║  2. Paste the URL in your browser and authenticate          ║\n'
+printf '║  3. Paste the authorization code when prompted              ║\n'
+printf '╚══════════════════════════════════════════════════════════════╝\n\n'
 
-# Match any https:// URL of meaningful length (avoids short non-URL strings)
-PLAIN_URL_RE = re.compile(rb'https://[^\s\x00-\x1f\x7f]{20,}')
-
-
-def osc8(url: bytes) -> bytes:
-    """Wrap url bytes in an OSC 8 hyperlink sequence."""
-    return b'\x1b]8;;' + url + b'\x07' + url + b'\x1b]8;;\x07'
-
-
-def add_osc8(data: bytes) -> bytes:
-    """Replace every plain https:// URL in data with an OSC 8 hyperlink."""
-    return PLAIN_URL_RE.sub(lambda m: osc8(m.group(0)), data)
-
-
-def winsize(fd: int):
-    try:
-        rows, cols = struct.unpack('HHHH', fcntl.ioctl(fd, termios.TIOCGWINSZ, b'\x00' * 8))[:2]
-        return rows, cols
-    except OSError:
-        return 24, 80
-
-
-def set_winsize(fd: int, rows: int, cols: int):
-    try:
-        fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', rows, cols, 0, 0))
-    except OSError:
-        pass
-
-
-master_fd, slave_fd = pty.openpty()
-rows, cols = winsize(sys.stdout.fileno())
-set_winsize(master_fd, rows, max(cols, MIN_COLS))
-
-pid = os.fork()
-if pid == 0:
-    os.close(master_fd)
-    os.setsid()
-    fcntl.ioctl(slave_fd, termios.TIOCSCTTY, 0)
-    for fd in range(3):
-        os.dup2(slave_fd, fd)
-    os.close(slave_fd)
-    os.execvpe('claude', ['claude'], os.environ)
-    sys.exit(1)
-
-os.close(slave_fd)
-
-
-def on_winch(_sig, _frame):
-    rows, cols = winsize(sys.stdout.fileno())
-    set_winsize(master_fd, rows, max(cols, MIN_COLS))
-    os.kill(pid, signal.SIGWINCH)
-
-
-signal.signal(signal.SIGWINCH, on_winch)
-
-stdin_fd = sys.stdin.fileno()
-old_attrs = termios.tcgetattr(stdin_fd)
-tty.setraw(stdin_fd)
-
-try:
-    while True:
-        try:
-            rfds, _, _ = select.select([master_fd, stdin_fd], [], [], 0.05)
-        except (ValueError, OSError):
-            break
-        if master_fd in rfds:
-            try:
-                chunk = os.read(master_fd, 4096)
-            except OSError:
-                break
-            if not chunk:
-                break
-            os.write(sys.stdout.fileno(), add_osc8(chunk))
-        if stdin_fd in rfds:
-            try:
-                data = os.read(stdin_fd, 4096)
-                if data:
-                    os.write(master_fd, data)
-            except OSError:
-                break
-finally:
-    termios.tcsetattr(stdin_fd, termios.TCSADRAIN, old_attrs)
-    try:
-        os.waitpid(pid, 0)
-    except ChildProcessError:
-        pass
+exec claude

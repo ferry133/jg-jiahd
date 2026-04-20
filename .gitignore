@@ -19,5 +19,7 @@ talosconfig
 .venv/
 .DS_Store
 Thumbs.db
+@eaDir/
+talos/clusterconfig/
 config.gen/cluster.yaml
 config.gen/nodes.yaml

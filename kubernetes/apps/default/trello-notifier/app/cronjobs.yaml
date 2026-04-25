@@ -26,11 +26,8 @@ spec:
                   subPath: line_contacts.json
           volumes:
             - name: contacts
-              secret:
-                secretName: trello-notifier-secret
-                items:
-                  - key: line_contacts.json
-                    path: line_contacts.json
+              configMap:
+                name: trello-notifier-contacts
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -59,11 +56,8 @@ spec:
                   subPath: line_contacts.json
           volumes:
             - name: contacts
-              secret:
-                secretName: trello-notifier-secret
-                items:
-                  - key: line_contacts.json
-                    path: line_contacts.json
+              configMap:
+                name: trello-notifier-contacts
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -92,8 +86,5 @@ spec:
                   subPath: line_contacts.json
           volumes:
             - name: contacts
-              secret:
-                secretName: trello-notifier-secret
-                items:
-                  - key: line_contacts.json
-                    path: line_contacts.json
+              configMap:
+                name: trello-notifier-contacts

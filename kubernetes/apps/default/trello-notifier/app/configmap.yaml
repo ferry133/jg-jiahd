@@ -1,0 +1,14 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trello-notifier-contacts
+data:
+  line_contacts.json: |
+    {
+      "Larry": "Ufec2b1856b6cd5ba44bd1ce743872545",
+      "LarryOffice": "U8f98e612ab159f7a756f9e06e9fc7553",
+      "SA": "U2cf64389cbab4cff96daa0ec96168494",
+      "端慧": "Ubcfb6c1cf849186e15567aa2936a3e72",
+      "yan": "U38fb5acd1540f414dccf3657152d4821"
+    }

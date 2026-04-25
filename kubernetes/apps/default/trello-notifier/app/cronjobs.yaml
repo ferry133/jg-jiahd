@@ -1,0 +1,126 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: trello-notifier-morning
+spec:
+  schedule: "0 9 * * 1-6"
+  timeZone: "Asia/Taipei"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 3600
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: notifier
+              image: python:3.11-slim
+              command:
+                - sh
+                - -c
+                - pip install requests -q && python /scripts/trello_line_notifier.py morning
+              envFrom:
+                - secretRef:
+                    name: trello-notifier-secret
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts/trello_line_notifier.py
+                  subPath: trello_line_notifier.py
+                - name: contacts
+                  mountPath: /scripts/line_contacts.json
+                  subPath: line_contacts.json
+          volumes:
+            - name: script
+              configMap:
+                name: trello-notifier-script
+            - name: contacts
+              secret:
+                secretName: trello-notifier-secret
+                items:
+                  - key: line_contacts.json
+                    path: line_contacts.json
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: trello-notifier-noon
+spec:
+  schedule: "0 12 * * 1-6"
+  timeZone: "Asia/Taipei"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 3600
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: notifier
+              image: python:3.11-slim
+              command:
+                - sh
+                - -c
+                - pip install requests -q && python /scripts/trello_line_notifier.py noon
+              envFrom:
+                - secretRef:
+                    name: trello-notifier-secret
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts/trello_line_notifier.py
+                  subPath: trello_line_notifier.py
+                - name: contacts
+                  mountPath: /scripts/line_contacts.json
+                  subPath: line_contacts.json
+          volumes:
+            - name: script
+              configMap:
+                name: trello-notifier-script
+            - name: contacts
+              secret:
+                secretName: trello-notifier-secret
+                items:
+                  - key: line_contacts.json
+                    path: line_contacts.json
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: trello-notifier-evening
+spec:
+  schedule: "0 18 * * 1-6"
+  timeZone: "Asia/Taipei"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 3600
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: notifier
+              image: python:3.11-slim
+              command:
+                - sh
+                - -c
+                - pip install requests -q && python /scripts/trello_line_notifier.py evening
+              envFrom:
+                - secretRef:
+                    name: trello-notifier-secret
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts/trello_line_notifier.py
+                  subPath: trello_line_notifier.py
+                - name: contacts
+                  mountPath: /scripts/line_contacts.json
+                  subPath: line_contacts.json
+          volumes:
+            - name: script
+              configMap:
+                name: trello-notifier-script
+            - name: contacts
+              secret:
+                secretName: trello-notifier-secret
+                items:
+                  - key: line_contacts.json
+                    path: line_contacts.json

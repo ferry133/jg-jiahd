@@ -24,3 +24,5 @@ talos/clusterconfig/
 config.gen/cluster.yaml
 config.gen/nodes.yaml
 /session.md
+# Per-app config files (gitignored, copy from .sample.yaml)
+/trello-notifier.yaml

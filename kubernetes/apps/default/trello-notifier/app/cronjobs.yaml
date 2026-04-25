@@ -15,25 +15,16 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: notifier
-              image: python:3.11-slim
-              command:
-                - sh
-                - -c
-                - pip install requests -q && python /scripts/trello_line_notifier.py morning
+              image: ghcr.io/ferry133/trello-notifier:latest
+              args: ["morning"]
               envFrom:
                 - secretRef:
                     name: trello-notifier-secret
               volumeMounts:
-                - name: script
-                  mountPath: /scripts/trello_line_notifier.py
-                  subPath: trello_line_notifier.py
                 - name: contacts
-                  mountPath: /scripts/line_contacts.json
+                  mountPath: /app/line_contacts.json
                   subPath: line_contacts.json
           volumes:
-            - name: script
-              configMap:
-                name: trello-notifier-script
             - name: contacts
               secret:
                 secretName: trello-notifier-secret
@@ -57,25 +48,16 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: notifier
-              image: python:3.11-slim
-              command:
-                - sh
-                - -c
-                - pip install requests -q && python /scripts/trello_line_notifier.py noon
+              image: ghcr.io/ferry133/trello-notifier:latest
+              args: ["noon"]
               envFrom:
                 - secretRef:
                     name: trello-notifier-secret
               volumeMounts:
-                - name: script
-                  mountPath: /scripts/trello_line_notifier.py
-                  subPath: trello_line_notifier.py
                 - name: contacts
-                  mountPath: /scripts/line_contacts.json
+                  mountPath: /app/line_contacts.json
                   subPath: line_contacts.json
           volumes:
-            - name: script
-              configMap:
-                name: trello-notifier-script
             - name: contacts
               secret:
                 secretName: trello-notifier-secret
@@ -99,25 +81,16 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: notifier
-              image: python:3.11-slim
-              command:
-                - sh
-                - -c
-                - pip install requests -q && python /scripts/trello_line_notifier.py evening
+              image: ghcr.io/ferry133/trello-notifier:latest
+              args: ["evening"]
               envFrom:
                 - secretRef:
                     name: trello-notifier-secret
               volumeMounts:
-                - name: script
-                  mountPath: /scripts/trello_line_notifier.py
-                  subPath: trello_line_notifier.py
                 - name: contacts
-                  mountPath: /scripts/line_contacts.json
+                  mountPath: /app/line_contacts.json
                   subPath: line_contacts.json
           volumes:
-            - name: script
-              configMap:
-                name: trello-notifier-script
             - name: contacts
               secret:
                 secretName: trello-notifier-secret

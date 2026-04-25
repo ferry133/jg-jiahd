@@ -80,7 +80,9 @@ tasks:
 
   render-configs:
     internal: true
-    cmd: makejinja
+    cmds:
+      - cp -n {{.ROOT_DIR}}/trello-notifier.sample.yaml {{.ROOT_DIR}}/trello-notifier.yaml 2>/dev/null || true
+      - makejinja
     env:
       PYTHONDONTWRITEBYTECODE: '1'
     preconditions:

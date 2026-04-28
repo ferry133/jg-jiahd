@@ -60,6 +60,14 @@ spec:
         size: 20Gi
         globalMounts:
           - path: /home/claude/workspace
+#% if nas_coding_path is defined %#
+      coding:
+        type: nfs
+        server: #{ nas_server }#
+        path: #{ nas_coding_path }#
+        globalMounts:
+          - path: /home/claude/coding
+#% endif %#
     defaultPodOptions:
       securityContext:
         runAsNonRoot: true

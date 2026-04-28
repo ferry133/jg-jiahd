@@ -13,6 +13,7 @@
     },
     "yaml.schemaStore.enable": true,
     "yaml.schemas": {
-        "kubernetes": "./kubernetes/**/*.yaml"
+        "kubernetes": "./kubernetes/**/*.yaml",
+        "./.taskfiles/template/resources/cluster.schema.json": "cluster.yaml"
     }
 }

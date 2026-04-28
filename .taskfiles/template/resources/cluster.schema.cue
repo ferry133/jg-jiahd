@@ -26,6 +26,9 @@ import (
 	cilium_bgp_router_asn?: string & !=""
 	cilium_bgp_node_asn?: string & !=""
 	cilium_loadbalancer_mode?: *"dsr" | "snat"
+	nas_server?: net.IPv4 & !=""
+	nas_path?: string & !=""
+	nas_coding_path?: string & !=""
 	claude_instances?: [...string]
 	ttyd_credential?: string & !=""
 }

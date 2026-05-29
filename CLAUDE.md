@@ -1,4 +1,4 @@
-# CLAUDE.md — jgu5 cluster
+# CLAUDE.md — jg-jiahd cluster
 
 ## ⚠️ 新增或修改 Extra App 時的三 Repo Checklist
 
@@ -9,7 +9,7 @@
    - `.taskfiles/template/resources/cluster.schema.cue`（加 optional 欄位）
    - `templates/config/kubernetes/components/sops/cluster-secrets.sops.yaml.j2`（加 VAR 行）
    - `cluster.sample.yaml`（加文件說明）
-3. **此 repo（jgu5）** — `cluster.yaml` 填值 → `task configure --yes` → commit & push
+3. **此 repo（jg-jiahd）** — `cluster.yaml` 填值 → `task configure --yes` → commit & push
 
 完整 checklist 見 `jg-cluster-template/CLAUDE.md`。
 
@@ -20,9 +20,9 @@
 **Always use `kubeconfig-sa`, never `kubeconfig`.**
 
 ```sh
-kubectl --kubeconfig ~/coding/jgu5/kubeconfig-sa <command>
+kubectl --kubeconfig ~/coding/jg-jiahd/kubeconfig-sa <command>
 # or
-export KUBECONFIG=~/coding/jgu5/kubeconfig-sa
+export KUBECONFIG=~/coding/jg-jiahd/kubeconfig-sa
 ```
 
 - `kubeconfig` requires OIDC browser auth — cannot be used non-interactively.

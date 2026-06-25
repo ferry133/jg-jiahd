@@ -65,6 +65,8 @@ KubeSpan 的 WireGuard 埠是 **UDP 51820,寫死、不能改**。
 
 ## 目前的 workaround(現有 remote worker)— 不可擴展
 
+> ⚠️ **已於 2026-06-25 被「錨點模型」取代**(patch `510` 已移除、worker 改走 CP 錨點)。本節保留作為「讓 worker 自己對外可達」做法的對照;實際採用的是下方的錨點模型。
+
 讓**站點 B 這台 worker 對外可達**:
 
 1. 站點 B router:**Port Forward 對外 `UDP 51830` → `10.9.1.171:51820`**(用空閒埠,VPN server 留在 51820 不動)。
@@ -120,6 +122,38 @@ spec:
 | 在 Omni 把機器加進叢集、指定 worker 角色 | ✅ 就這一步 |
 
 前提:控制平面(錨點)已經可達。
+
+### 實作驗證(jg-jiahd 範例,2026-06-25)
+
+方案 2(沿用現有硬體、CP 站點一次性可達)已在 jg-jiahd 實作並驗證。
+
+**站點 A 路由器(UniFi,固定公網 `220.132.89.94`)只加 port-forward:**
+
+| 對外 (UDP) | → 內網目標 | 對應 CP / machine ID |
+|---|---|---|
+| 50822 | `10.9.9.22:51820` | talos-dk0-t6p / `730b41a1-…-48210b73264d` |
+| 50823 | `10.9.9.23:51820` | talos-9mf-rjc / `a1936aea-…-48210b6fdd3b` |
+
+> **乾淨的 port-forward 不需要另外加防火牆規則。** UniFi(及多數路由器)建立 port-forward 時會**自動放行**該轉發流量(DNAT 的同時隱含允許 inbound)。站點 A 只做了上面兩條 port-forward、**沒有**任何手動 firewall policy,就直接通了 —— 已實證 worker 確實從網際網路打進這兩個埠。
+>
+> (站點 B 當時之所以要談防火牆 / `Src Port=Any`,是因為那邊**先手動建了** firewall policy 去框這個流量 → 反而要把它設對。沒手動建 policy,就走「port-forward 自動放行」最單純的路。)
+
+**每台 CP 一條 machine-scoped announce patch**(格式同前面 `510` 那段,只是綁到 CP 機器):
+
+```yaml
+# 511-jg-jiahd-cp-dk0-kubespan-endpoint  → machine 730b41a1…/10.9.9.22
+spec.data: |-
+  apiVersion: v1alpha1
+  kind: KubeSpanEndpointsConfig
+  extraAnnouncedEndpoints:
+    - 220.132.89.94:50822
+# 512-jg-jiahd-cp-9mf-kubespan-endpoint  → machine a1936aea…/10.9.9.23
+#   extraAnnouncedEndpoints: [ 220.132.89.94:50823 ]
+```
+
+- 套用到 CP 是**免重啟的網路設定**(etcd 全程 2/2、節點不掉);仍建議**一台一台**來,保護脆弱的 2 成員 quorum。
+
+**關鍵驗證**:刪除 worker 自己的舊 workaround(patch `510` + 站點 B 的 51830 轉發)後,worker 純靠「主動連 CP 錨點」運作 → **約 2.7 分鐘 KubeSpan 持續 `up`、0 次 down**,worker pod→kube-svc/CoreDNS OK,`kubectl logs`(CP→worker 反向)OK。**證明:此後任何 remote worker 零設定即可加入。**
 
 ### 限制(誠實說明)
 

@@ -84,6 +84,19 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         runAsGroup: 1000
+    podLabels:
+      hostnetwork-group: claude-code
+    # hostNetwork pods all bind :7681 on the node -- hard-require spreading
+    # across nodes so this and any other claude-code/instance never collide
+    # (including the base claude-code app and multiple claude_instances on
+    # the same client).
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                hostnetwork-group: claude-code
+            topologyKey: kubernetes.io/hostname
     service:
       app:
         ports:

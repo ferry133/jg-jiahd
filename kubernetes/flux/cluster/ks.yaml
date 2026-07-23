@@ -136,31 +136,10 @@ spec:
   dependsOn:
     - name: cluster-apps-base
 ---
-# ── extras/claudecode/claude-code ─────────────────────────────────────────────────────────
-apiVersion: kustomize.toolkit.fluxcd.io/v1
-kind: Kustomization
-metadata:
-  name: extras-claude-code
-  namespace: flux-system
-spec:
-  decryption:
-    provider: sops
-  deletionPolicy: WaitForTermination
-  interval: 1h
-  path: ./kubernetes/apps/extras/claudecode/claude-code
-  prune: true
-  sourceRef:
-    kind: GitRepository
-    name: jg-base
-    namespace: flux-system
-  postBuild:
-    substituteFrom:
-      - name: cluster-secrets
-        kind: Secret
-  dependsOn:
-    - name: cluster-apps-base
----
 # ── claude-code instances (per-cluster rendered from claude_instances) ────────
+# Fixed base claude-code app (jg-base's extras-claude-code) deliberately not
+# included -- this cluster only wants cc.jiahd.cc. namespace.yaml lives here
+# instead (see instances/namespace.yaml) since that Kustomization is gone.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
@@ -182,7 +161,7 @@ spec:
       - name: cluster-secrets
         kind: Secret
   dependsOn:
-    - name: extras-claude-code
+    - name: cluster-apps-base
 ---
 # ── extras/default/linebot ─────────────────────────────────────────────────────────
 apiVersion: kustomize.toolkit.fluxcd.io/v1

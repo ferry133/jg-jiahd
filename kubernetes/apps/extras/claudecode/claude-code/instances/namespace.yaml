@@ -1,0 +1,11 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: claudecode
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+  labels:
+    # cc instance runs with hostNetwork: true; baseline/restricted
+    # PodSecurity blocks host namespaces.
+    pod-security.kubernetes.io/enforce: privileged

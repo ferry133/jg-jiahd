@@ -76,6 +76,8 @@ spec:
         globalMounts:
           - path: /home/claude/coding
     defaultPodOptions:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

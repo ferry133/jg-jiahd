@@ -17,7 +17,7 @@ spec:
           app:
             image:
               repository: ghcr.io/ferry133/claude-code
-              tag: 147eb06
+              tag: d39e74a
             env:
               TTYD_CREDENTIAL:
                 valueFrom:

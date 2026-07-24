@@ -18,7 +18,7 @@ spec:
           app:
             image:
               repository: ghcr.io/ferry133/claude-code
-              tag: latest
+              tag: 147eb06
             env:
               TTYD_CREDENTIAL:
                 valueFrom:
@@ -47,8 +47,17 @@ spec:
                   timeoutSeconds: 5
                   failureThreshold: 3
             securityContext:
-              allowPrivilegeEscalation: false
-              capabilities: { drop: ["ALL"] }
+              # NOT false: no_new_privs would block the setcap file
+              # capabilities (nmap/arp-scan/tcpdump/masscan) baked into the
+              # image from ever activating at exec time, even though
+              # NET_RAW is already granted below. User-confirmed tradeoff
+              # (2026-07-23): scope stays NET_RAW-only via drop ALL below,
+              # uid stays non-root -- only exec-time file-cap activation
+              # is re-enabled, not a broader escalation.
+              allowPrivilegeEscalation: true
+              capabilities:
+                drop: ["ALL"]
+                add: ["NET_RAW"] # nmap/masscan/arp-scan/tcpdump/fping raw sockets
             resources:
               requests:
                 cpu: 100m
@@ -77,10 +86,25 @@ spec:
         globalMounts:
           - path: /home/claude/coding
     defaultPodOptions:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
         runAsGroup: 1000
+      labels:
+        hostnetwork-group: claude-code
+      # hostNetwork pods all bind :7681 on the node -- hard-require spreading
+      # across nodes so this and any other claude-code/instance never collide
+      # (including the base claude-code app and multiple claude_instances on
+      # the same client).
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  hostnetwork-group: claude-code
+              topologyKey: kubernetes.io/hostname
     service:
       app:
         ports:

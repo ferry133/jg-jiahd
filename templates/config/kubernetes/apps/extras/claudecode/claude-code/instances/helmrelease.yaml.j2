@@ -34,7 +34,9 @@ spec:
               # OIDC mode: the oauth2-proxy sidecar is the only way in --
               # ttyd binds loopback and requires the email header the proxy
               # injects (value surfaces as TTYD_USER -> CLAUDE_USER_ID).
-              TTYD_INTERFACE: lo
+              # Explicit IP, not "lo": ttyd resolves an interface name to its
+              # first non-127 address (Talos puts 169.254.x.x on lo).
+              TTYD_INTERFACE: 127.0.0.1
               TTYD_AUTH_HEADER: X-Forwarded-Email
 #% else %#
               TTYD_CREDENTIAL:

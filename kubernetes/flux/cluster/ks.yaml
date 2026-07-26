@@ -137,10 +137,6 @@ spec:
     - name: cluster-apps-base
 ---
 # ── extras/claudecode/claude-code ─────────────────────────────────────────────────────────
-# Shared plumbing only (namespace, chart OCIRepository, TTYD_CREDENTIAL
-# Secret) as of jg-base@83f2859 -- the fixed base app is gone, claude_instances
-# is the only source of actual claude-code deployments. cc's HelmRelease
-# depends on the OCIRepository/Secret this provides.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:

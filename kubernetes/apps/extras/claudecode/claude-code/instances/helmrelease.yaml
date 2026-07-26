@@ -13,12 +13,18 @@ spec:
     controllers:
       cc:
         strategy: Recreate
+        serviceAccount:
+          name: claude-code # shared SA, RBAC bound in jg-base claudecode app
         containers:
           app:
             image:
               repository: ghcr.io/ferry133/claude-code
-              tag: d39e74a
+              tag: 86e7212
             env:
+              # The pod runs as uid 0 (see defaultPodOptions), which would
+              # resolve HOME=/root -- but all state (claude config PVC,
+              # keyring, workspace) lives under /home/claude.
+              HOME: /home/claude
               TTYD_CREDENTIAL:
                 valueFrom:
                   secretKeyRef:
@@ -45,18 +51,6 @@ spec:
                   periodSeconds: 30
                   timeoutSeconds: 5
                   failureThreshold: 3
-            securityContext:
-              # NOT false: no_new_privs would block the setcap file
-              # capabilities (nmap/arp-scan/tcpdump/masscan) baked into the
-              # image from ever activating at exec time, even though
-              # NET_RAW is already granted below. User-confirmed tradeoff
-              # (2026-07-23): scope stays NET_RAW-only via drop ALL below,
-              # uid stays non-root -- only exec-time file-cap activation
-              # is re-enabled, not a broader escalation.
-              allowPrivilegeEscalation: true
-              capabilities:
-                drop: ["ALL"]
-                add: ["NET_RAW"] # nmap/masscan/arp-scan/tcpdump/fping raw sockets
             resources:
               requests:
                 cpu: 100m
@@ -88,9 +82,14 @@ spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
+        # root, not uid 1000 (user-confirmed 2026-07-26): the NAS NFS exports
+        # only allow root -- uid 1000 saw /home/claude/coding as d---------
+        # (mode 000). Root's default runtime caps also cover NET_RAW, which
+        # retires the setcap-file-capability + allowPrivilegeEscalation dance
+        # the scanners needed under uid 1000. HOME is pinned to /home/claude
+        # via container env.
+        runAsUser: 0
+        runAsGroup: 0
       labels:
         hostnetwork-group: claude-code
       # hostNetwork pods all bind :7681 on the node -- hard-require spreading

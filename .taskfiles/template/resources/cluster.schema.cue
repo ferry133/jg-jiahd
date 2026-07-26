@@ -39,6 +39,11 @@ import (
 	claude_code_database_url?: string
 	claude_instances?: [...string]
 	ttyd_credential?: string & !=""
+	claudecode_auth0_domain?: string & !=""
+	claudecode_auth0_client_id?: string & !=""
+	claudecode_auth0_client_secret?: string & !=""
+	claudecode_oauth2_cookie_secret?: string & !=""
+	claudecode_allowed_emails?: string & !=""
 	postgres_password?: string & !=""
 	trello_api_key?: string
 	trello_api_token?: string

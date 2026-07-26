@@ -26,6 +26,10 @@ spec:
               # resolve HOME=/root -- but all state (claude config PVC,
               # keyring, workspace) lives under /home/claude.
               HOME: /home/claude
+              # Without this, onboarding/account state goes to ~/.claude.json
+              # in the ephemeral overlay and login is lost on every pod
+              # restart; inside CLAUDE_CONFIG_DIR it lands on the PVC.
+              CLAUDE_CONFIG_DIR: /home/claude/.claude
               TTYD_CREDENTIAL:
                 valueFrom:
                   secretKeyRef:
@@ -66,6 +70,10 @@ spec:
         size: 5Gi
         globalMounts:
           - path: /home/claude/.claude
+          # gnome-keyring's store -- claude's OAuth tokens land here via
+          # secret-service; without this mount they die with the pod.
+          - path: /home/claude/.local/share/keyrings
+            subPath: keyrings
       claude-workspace:
         type: persistentVolumeClaim
         storageClass: sc-nas

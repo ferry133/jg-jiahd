@@ -158,6 +158,18 @@ spec:
               limits:
                 memory: 128Mi
 #% endif %#
+#% if claudecode_auth0_domain is defined %#
+    configMaps:
+      oauth2-emails:
+        data:
+          # One email per line, rendered from claudecode_allowed_emails at
+          # template time -- deliberately NOT a Flux var: postBuild
+          # substitution collapses newlines in multi-line values.
+          allowed-emails: |
+#% for email in claudecode_allowed_emails.split(',') %#
+            #{ email | trim }#
+#% endfor %#
+#% endif %#
     persistence:
       claude-config:
         type: persistentVolumeClaim
@@ -185,13 +197,13 @@ spec:
           - path: /home/claude/coding
 #% if claudecode_auth0_domain is defined %#
       oauth2-emails:
-        type: secret
-        name: claude-code-secret
+        type: configMap
+        identifier: oauth2-emails
         advancedMounts:
           #{instance}#:
             oauth2-proxy:
               - path: /etc/oauth2-proxy/allowed-emails
-                subPath: ALLOWED_EMAILS
+                subPath: allowed-emails
 #% endif %#
     defaultPodOptions:
       hostNetwork: true

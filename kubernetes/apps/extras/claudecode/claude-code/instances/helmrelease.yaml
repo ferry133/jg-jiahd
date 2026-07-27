@@ -124,6 +124,15 @@ spec:
                 memory: 32Mi
               limits:
                 memory: 128Mi
+    configMaps:
+      oauth2-emails:
+        data:
+          # One email per line, rendered from claudecode_allowed_emails at
+          # template time -- deliberately NOT a Flux var: postBuild
+          # substitution collapses newlines in multi-line values.
+          allowed-emails: |
+            jiahdadm@gmail.com
+            ferry133@gmail.com
     persistence:
       claude-config:
         type: persistentVolumeClaim
@@ -150,13 +159,13 @@ spec:
         globalMounts:
           - path: /home/claude/coding
       oauth2-emails:
-        type: secret
-        name: claude-code-secret
+        type: configMap
+        identifier: oauth2-emails
         advancedMounts:
           cc:
             oauth2-proxy:
               - path: /etc/oauth2-proxy/allowed-emails
-                subPath: ALLOWED_EMAILS
+                subPath: allowed-emails
     defaultPodOptions:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet

@@ -141,12 +141,16 @@ spec:
               allowPrivilegeEscalation: false
               capabilities: { drop: ["ALL"] }
             probes:
+              # FastMCP binds 127.0.0.1 only (see talos_mcp_server.py); on a
+              # hostNetwork pod, kubelet's tcpSocket probe dials the pod/node
+              # IP, not loopback -- same class of bug as ttyd's OIDC-mode
+              # probes above. exec + /dev/tcp/127.0.0.1 checks from inside.
               liveness:
                 enabled: true
                 custom: true
                 spec:
-                  tcpSocket:
-                    port: 8765
+                  exec:
+                    command: ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8765"]
                   initialDelaySeconds: 10
                   periodSeconds: 30
                   timeoutSeconds: 5
@@ -155,8 +159,8 @@ spec:
                 enabled: true
                 custom: true
                 spec:
-                  tcpSocket:
-                    port: 8765
+                  exec:
+                    command: ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8765"]
                   initialDelaySeconds: 10
                   periodSeconds: 30
                   timeoutSeconds: 5

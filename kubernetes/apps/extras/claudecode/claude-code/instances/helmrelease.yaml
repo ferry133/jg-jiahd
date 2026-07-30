@@ -13,13 +13,19 @@ spec:
     controllers:
       cc:
         strategy: Recreate
+        # Client remote-support terminal: off by default. Scale to 1 only
+        # while actively supporting this client, to minimize the standing
+        # exposure window of a LAN-facing root shell with network-scanning
+        # capability and cluster-admin RBAC (see rbac.yaml in the jg-base
+        # claudecode app).
+        replicas: 0
         serviceAccount:
           name: claude-code # shared SA, RBAC bound in jg-base claudecode app
         containers:
           app:
             image:
               repository: ghcr.io/ferry133/claude-code
-              tag: e249a9c
+              tag: dc6343e
             env:
               # The pod runs as uid 0 (see defaultPodOptions), which would
               # resolve HOME=/root -- but all state (claude config PVC,
@@ -29,6 +35,10 @@ spec:
               # in the ephemeral overlay and login is lost on every pod
               # restart; inside CLAUDE_CONFIG_DIR it lands on the PVC.
               CLAUDE_CONFIG_DIR: /home/claude/.claude
+              # Registers the talos-mcp sidecar as a remote MCP server (see
+              # claude-session in k8scc) -- reachable only via loopback since
+              # this pod is hostNetwork.
+              TALOS_MCP_URL: http://127.0.0.1:8765/sse
               # OIDC mode: the oauth2-proxy sidecar is the only way in --
               # ttyd binds loopback and requires the email header the proxy
               # injects (value surfaces as TTYD_USER -> CLAUDE_USER_ID).
@@ -65,6 +75,63 @@ spec:
                 memory: 256Mi
               limits:
                 memory: 1Gi
+          talos-mcp:
+            # Own container, own credential mount -- the app container above
+            # never sees this secret. See openspec/changes/insideman in
+            # jg-base for the full design.
+            image:
+              repository: ghcr.io/ferry133/claude-code
+              tag: dc6343e
+            command: ["python3", "/usr/local/bin/talos_mcp_server.py"]
+            env:
+              TALOSCONFIG: /etc/talos-mcp/talosconfig
+              # The talosconfig above carries no key material (Omni's siderov1
+              # auth needs either a locally-registered PGP key -- which a
+              # fresh container never has -- or these two env vars, read
+              # directly by talosctl's own auth library). Endpoint must be a
+              # direct, non-Cloudflare-Tunnel gRPC path (see talos-mcp-secret
+              # in jg-base) -- confirmed 2026-07-30 against jg-jiahd that the
+              # Tunnel breaks gRPC trailers the siderov1 proxy depends on.
+              OMNI_SERVICE_ACCOUNT_KEY:
+                valueFrom:
+                  secretKeyRef:
+                    name: talos-mcp-secret
+                    key: saKey
+              OMNI_ENDPOINT:
+                valueFrom:
+                  secretKeyRef:
+                    name: talos-mcp-secret
+                    key: omniEndpoint
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: { drop: ["ALL"] }
+            probes:
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  tcpSocket:
+                    port: 8765
+                  initialDelaySeconds: 10
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  tcpSocket:
+                    port: 8765
+                  initialDelaySeconds: 10
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              limits:
+                memory: 128Mi
           oauth2-proxy:
             image:
               repository: quay.io/oauth2-proxy/oauth2-proxy
@@ -166,6 +233,15 @@ spec:
             oauth2-proxy:
               - path: /etc/oauth2-proxy/allowed-emails
                 subPath: allowed-emails
+      talos-mcp-config:
+        type: secret
+        name: talos-mcp-secret
+        advancedMounts:
+          cc:
+            talos-mcp:
+              - path: /etc/talos-mcp/talosconfig
+                subPath: talosconfig
+                readOnly: true
     defaultPodOptions:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
@@ -181,9 +257,8 @@ spec:
       labels:
         hostnetwork-group: claude-code
       # hostNetwork pods all bind :7681 on the node -- hard-require spreading
-      # across nodes so this and any other claude-code/instance never collide
-      # (including the base claude-code app and multiple claude_instances on
-      # the same client).
+      # across nodes so multiple claude_instances on the same client never
+      # collide.
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

@@ -44,6 +44,9 @@ import (
 	claudecode_auth0_client_secret?: string & !=""
 	claudecode_oauth2_cookie_secret?: string & !=""
 	claudecode_allowed_emails?: string & !=""
+	talos_mcp_config?: string & !=""
+	talos_mcp_sa_key?: string & !=""
+	talos_mcp_omni_endpoint?: string & !=""
 	postgres_password?: string & !=""
 	trello_api_key?: string
 	trello_api_token?: string

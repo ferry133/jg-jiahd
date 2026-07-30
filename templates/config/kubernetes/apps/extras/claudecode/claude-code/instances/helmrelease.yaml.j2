@@ -26,7 +26,7 @@ spec:
           app:
             image:
               repository: ghcr.io/ferry133/claude-code
-              tag: dc6343e
+              tag: 00c2f68
             env:
               # The pod runs as uid 0 (see defaultPodOptions), which would
               # resolve HOME=/root -- but all state (claude config PVC,
@@ -116,7 +116,7 @@ spec:
             # jg-base for the full design.
             image:
               repository: ghcr.io/ferry133/claude-code
-              tag: dc6343e
+              tag: 00c2f68
             command: ["python3", "/usr/local/bin/talos_mcp_server.py"]
             env:
               TALOSCONFIG: /etc/talos-mcp/talosconfig

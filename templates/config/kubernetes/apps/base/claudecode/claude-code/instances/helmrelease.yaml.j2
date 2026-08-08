@@ -19,19 +19,20 @@ spec:
     controllers:
       #{instance}#:
         strategy: Recreate
-        # Client remote-support terminal: off by default. Scale to 1 only
-        # while actively supporting this client, to minimize the standing
-        # exposure window of a LAN-facing root shell with network-scanning
-        # capability and cluster-admin RBAC (see rbac.yaml in the jg-base
-        # claudecode app).
-        replicas: 0
+        # jg-jiahd's "cc" is the always-on personal instance (not an
+        # ephemeral client-support terminal, which is why the upstream
+        # jg-cluster-template default is 0 -- see that repo's copy of this
+        # file). Deliberately deviates from that default: user-confirmed
+        # 2026-08-08, replacing the manual `kubectl scale --replicas=1`
+        # drift this was previously running under.
+        replicas: 1
         serviceAccount:
           name: claude-code # shared SA, RBAC bound in jg-base claudecode app
         containers:
           app:
             image:
               repository: ghcr.io/ferry133/claude-code
-              tag: 00c2f68
+              tag: e9d1adf
             env:
               # The pod runs as uid 0 (see defaultPodOptions), which would
               # resolve HOME=/root -- but all state (claude config PVC,
@@ -121,7 +122,7 @@ spec:
             # jg-base for the full design.
             image:
               repository: ghcr.io/ferry133/claude-code
-              tag: 00c2f68
+              tag: e9d1adf
             command: ["python3", "/usr/local/bin/talos_mcp_server.py"]
             env:
               TALOSCONFIG: /etc/talos-mcp/talosconfig

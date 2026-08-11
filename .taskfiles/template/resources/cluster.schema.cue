@@ -234,6 +234,18 @@ import (
 	// does not contain is an address the Service cannot get.
 	mariadb_lb_ip?: net.IPv4 & !=""
 	omni_udp_lb_ip?: net.IPv4 & !=""
+
+	// Collapse every LAN-facing service onto one address. Their ports do not
+	// overlap (80/443, 53, 1883), so one address serves all three, and finding
+	// one free address on an unknown LAN is a far smaller problem than finding
+	// three. When set it supersedes cluster_gateway_addr,
+	// cluster_dns_gateway_addr and mqtt_lb_ip — those stay declared because the
+	// cluster still has to state which addresses it claims, but all three
+	// render to this one.
+	//
+	// Opt-in: collapsing moves services off addresses that LAN clients may
+	// already be configured with.
+	lan_shared_addr?: net.IPv4 & !=""
 	cloudflare_lan_tunnel_token?: string & !=""
 	// monitoring/daily-check (base app on every cluster). Fields stay optional:
 	// an unconfigured cluster's CronJob exits 0 with a "not configured" log

@@ -159,6 +159,33 @@ class Plugin(makejinja.plugin.Plugin):
         # and restored — a PVC's storageClassName is immutable, so the move is
         # not something a re-render can perform.
         data.setdefault('db_storage_class', 'local-path')
+        # The three LAN-facing services listen on non-overlapping ports
+        # (80/443, 53, 1883), so one address serves all of them. Collapsing them
+        # turns "find several free addresses on a LAN you have never seen" into
+        # "find one", which is the difference between a customer-supplied field
+        # and a discovered one.
+        #
+        # Opt-in, because collapsing is a breaking change for anything on the
+        # LAN that already talks to the old addresses — a DNS resolver setting,
+        # an MQTT broker address, a HomeKit pairing. An appliance has no such
+        # history, so it collapses from the start; an existing cluster does it
+        # deliberately by setting lan_shared_addr.
+        shared = data.get('lan_shared_addr')
+        if shared:
+            for field in ('cluster_gateway_addr', 'cluster_dns_gateway_addr',
+                          'mqtt_lb_ip'):
+                if data.get(field):
+                    data[field] = shared
+        # Empty is not a sharing key that everything shares — Cilium treats it
+        # as no key at all, verified on jgt-omni. So the annotations can sit in
+        # jg-base unconditionally and stay inert on clusters that do not share.
+        data.setdefault('lan_sharing_key', 'lan' if shared else '')
+        # An explicit namespace list, never "*": kustomize strips the quotes
+        # around a substituted scalar, and a bare `*` is a YAML alias, so the
+        # whole manifest fails to parse after substitution. Naming the two
+        # namespaces is also the smaller permission.
+        data.setdefault('lan_sharing_cross_namespace',
+                        'network,mqtt' if shared else '')
         # Every address this cluster actually hands to a LoadBalancer, so the
         # pool can stop covering the customer's entire LAN. `cluster_api_addr`
         # is deliberately absent: it is a Talos VIP, not a Service.
@@ -179,9 +206,15 @@ class Plugin(makejinja.plugin.Plugin):
                 lb_addrs.append(str(data[field]))
         seen: set[str] = set()
         addrs = [a for a in lb_addrs if not (a in seen or seen.add(a))]
-        data.setdefault('lb_pool_blocks', json.dumps(
-            [{'start': a, 'stop': a} for a in addrs], separators=(',', ':')))
-        data.setdefault('lb_pool_wide_disabled', 'true' if addrs else 'false')
+        # There is exactly one pool. A second, narrower pool alongside the wide
+        # one cannot work — being a subset it overlaps, and Cilium rejects any
+        # overlap with PoolConflict=cidr_overlap whether or not the wide one is
+        # disabled. So a cluster with nothing to enumerate writes out the whole
+        # node CIDR here, which is what it was getting implicitly anyway.
+        blocks = ([{'start': a, 'stop': a} for a in addrs] if addrs
+                  else [{'cidr': str(data.get('node_cidr'))}])
+        data.setdefault('lb_pool_blocks',
+                        json.dumps(blocks, separators=(',', ':')))
         # Whether local-path should claim the cluster-default StorageClass.
         # nfs-subdir claims it whenever it is running, and it only runs on an
         # NFS cluster, so the two never collide.

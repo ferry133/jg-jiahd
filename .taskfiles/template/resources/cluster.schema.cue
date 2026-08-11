@@ -229,6 +229,11 @@ import (
 	omni_gpg_key?: string
 	mqtt_lb_ip?: net.IPv4 & !=""
 	ingress_nginx_lb_ip?: net.IPv4 & !=""
+	// LoadBalancer addresses for extras that used to hardcode one in jg-base.
+	// Declared here so the narrowed pool knows about them — an address the pool
+	// does not contain is an address the Service cannot get.
+	mariadb_lb_ip?: net.IPv4 & !=""
+	omni_udp_lb_ip?: net.IPv4 & !=""
 	cloudflare_lan_tunnel_token?: string & !=""
 	// monitoring/daily-check (base app on every cluster). Fields stay optional:
 	// an unconfigured cluster's CronJob exits 0 with a "not configured" log

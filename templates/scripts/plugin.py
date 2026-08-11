@@ -159,6 +159,29 @@ class Plugin(makejinja.plugin.Plugin):
         # and restored — a PVC's storageClassName is immutable, so the move is
         # not something a re-render can perform.
         data.setdefault('db_storage_class', 'local-path')
+        # Every address this cluster actually hands to a LoadBalancer, so the
+        # pool can stop covering the customer's entire LAN. `cluster_api_addr`
+        # is deliberately absent: it is a Talos VIP, not a Service.
+        #
+        # The wide pool is only disabled once there is something to replace it
+        # with. An appliance declares no addresses at all — it discovers its one
+        # address at runtime — so it keeps the wide pool until that lands.
+        lb_addrs: list[str] = []
+        for field in ('cluster_gateway_addr', 'cluster_dns_gateway_addr',
+                      'cloudflare_gateway_addr'):
+            if data.get(field):
+                lb_addrs.append(str(data[field]))
+        for extra, field in (('default/mqtt', 'mqtt_lb_ip'),
+                             ('ingress-nginx/ingress-nginx', 'ingress_nginx_lb_ip'),
+                             ('default/mariadb', 'mariadb_lb_ip'),
+                             ('omni/omni', 'omni_udp_lb_ip')):
+            if extra in (data.get('extras') or []) and data.get(field):
+                lb_addrs.append(str(data[field]))
+        seen: set[str] = set()
+        addrs = [a for a in lb_addrs if not (a in seen or seen.add(a))]
+        data.setdefault('lb_pool_blocks', json.dumps(
+            [{'start': a, 'stop': a} for a in addrs], separators=(',', ':')))
+        data.setdefault('lb_pool_wide_disabled', 'true' if addrs else 'false')
         # Whether local-path should claim the cluster-default StorageClass.
         # nfs-subdir claims it whenever it is running, and it only runs on an
         # NFS cluster, so the two never collide.

@@ -89,7 +89,8 @@ spec:
               target:
                 group: helm.toolkit.fluxcd.io
                 kind: HelmRelease
-            # jgu5: QUIC (UDP 7844) blocked by upstream firewall — force http2
+            # jg-jiahd: QUIC (UDP 7844) blocked by this site's upstream
+            # firewall — force http2. Per-cluster; other clusters keep QUIC.
             - patch: |-
                 apiVersion: helm.toolkit.fluxcd.io/v2
                 kind: HelmRelease

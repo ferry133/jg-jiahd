@@ -89,7 +89,8 @@ spec:
               target:
                 group: helm.toolkit.fluxcd.io
                 kind: HelmRelease
-            # jgu5: QUIC (UDP 7844) blocked by upstream firewall — force http2
+            # jg-jiahd: QUIC (UDP 7844) blocked by this site's upstream
+            # firewall — force http2. Per-cluster; other clusters keep QUIC.
             - patch: |-
                 apiVersion: helm.toolkit.fluxcd.io/v2
                 kind: HelmRelease
@@ -111,6 +112,42 @@ spec:
       target:
         group: kustomize.toolkit.fluxcd.io
         kind: Kustomization
+#| Base apps that cannot function under this cluster's shape are suspended here.
+   jg-base lists every base app unconditionally — Flux cannot decline to create a
+   Kustomization from that side — so the decision has to be expressed from the
+   per-user repo. This is generated from cluster.yaml rather than hand-written
+   into the rendered file, so it stays visible as configuration instead of
+   becoming drift.
+
+   Scalar-only strategic merge: it sets `suspend` and nothing else, so the
+   generic HelmRelease-strategy patch above survives. A second patch that set
+   `spec.patches` would replace that list wholesale. #|
+#% set _disabled = [] %#
+#% if storage_backend != 'nfs' %#
+#|   nfs-subdir provisions from a NAS this cluster does not have. #|
+#% set _ = _disabled.append(('nfs-client-provisioner', 'storage_backend is ' ~ storage_backend ~ ', so there is no NAS to provision from')) %#
+#% endif %#
+#% if is_single_node %#
+#|   Spegel is a peer-to-peer image mirror; with no peers its router never
+     bootstraps, the pod never becomes ready, and it still rewrites every
+     registry to a local port that nothing answers. #|
+#% set _ = _disabled.append(('spegel', 'single-node cluster: a peer-to-peer image mirror has no peers')) %#
+#% endif %#
+#% for name, why in _disabled %#
+    # suspended: #{ why }#
+    - patch: |-
+        apiVersion: kustomize.toolkit.fluxcd.io/v1
+        kind: Kustomization
+        metadata:
+          name: #{ name }#
+          namespace: flux-system
+        spec:
+          suspend: true
+      target:
+        group: kustomize.toolkit.fluxcd.io
+        kind: Kustomization
+        name: #{ name }#
+#% endfor %#
 ---
 # ── claude-code instances (base; per-cluster rendered from claude_instances) ──
 # The shared pieces (namespace, SA/RBAC, OCIRepository, secrets) come from
@@ -139,11 +176,21 @@ spec:
         kind: Secret
   dependsOn:
     - name: cluster-apps-base
-#| claudecode/claude-code and monitoring/daily-check moved from extras to base
-   (2026-08-07); the filter below skips them so a per-user cluster.yaml that
-   still lists either does not render a Kustomization pointing at a jg-base
-   path that no longer exists. #|
-#% set _now_base = ['claudecode/claude-code', 'monitoring/daily-check'] %#
+#| Apps that graduated from extras to base. The filter skips them so a per-user
+   cluster.yaml that still lists one does not render a Kustomization pointing at
+   a jg-base path that no longer exists.
+
+     claudecode/claude-code, monitoring/daily-check     2026-08-07
+     storage/local-path-provisioner                     2026-08-11
+
+   local-path is not the alternative to NFS — it is the node-local tier, and a
+   cluster with a NAS still needs one (Postgres on NFS is wrong on fsync and
+   lock semantics regardless of NAS size). So it is installed everywhere and
+   never suspended, and `storage_backend` only decides which class is default.
+
+   storage/nfs-subdir is likewise a base app, but it IS conditional, so it is
+   disabled by the suspend patch on cluster-apps-base above rather than here. #|
+#% set _now_base = ['claudecode/claude-code', 'monitoring/daily-check', 'storage/local-path-provisioner'] %#
 #% for extra in extras | default([]) if extra not in _now_base %#
 #% set _app = extra.split('/')[1] %#
 ---

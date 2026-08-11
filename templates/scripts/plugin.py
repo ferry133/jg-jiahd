@@ -117,6 +117,14 @@ def github_push_token(file_path: str = 'github-push-token.txt') -> str:
         raise RuntimeError(f"Unexpected error while reading {file_path}: {e}")
 
 
+# Return a list of files in the talos patches directory
+def talos_patches(value: str) -> list[str]:
+    path = Path(f'templates/config/talos/patches/{value}')
+    if not path.is_dir():
+        return []
+    return [str(f) for f in sorted(path.glob('*.yaml.j2')) if f.is_file()]
+
+
 class Plugin(makejinja.plugin.Plugin):
     def __init__(self, data: dict[str, Any]):
         self._data = data
@@ -125,9 +133,53 @@ class Plugin(makejinja.plugin.Plugin):
     def data(self) -> makejinja.plugin.Data:
         data = self._data
 
-        # Set default values for optional fields
+        # Set default values for optional fields.
+        # These must match the defaults documented in cluster.sample.yaml —
+        # a documented default the code does not apply is a defect.
+        data.setdefault('node_default_gateway', nthhost(data.get('node_cidr'), 1))
+        data.setdefault('node_dns_servers', ['1.1.1.1', '1.0.0.1'])
+        data.setdefault('node_ntp_servers', ['162.159.200.1', '162.159.200.123'])
         data.setdefault('cluster_pod_cidr', '10.42.0.0/16')
-        data.setdefault('cluster_svc_cidr', '10.96.0.0/16')
+        # cluster_svc_cidr is required (no default) — see cluster.schema.cue.
+        # coredns must sit at .10 of whatever service CIDR the cluster actually
+        # uses, so derive it rather than hardcoding a value that is only correct
+        # for one provisioning path. An explicit coredns_cluster_ip still wins.
+        data.setdefault('coredns_cluster_ip', nthhost(data.get('cluster_svc_cidr'), 10))
+        # Storage class for PVCs that do not pick one explicitly. Databases are
+        # block-backed regardless — this selects what bulk media and file shares
+        # get, which is the only thing the backend axis decides.
+        data.setdefault(
+            'default_storage_class',
+            'sc-nas' if data.get('storage_backend') == 'nfs' else 'local-path',
+        )
+        # The block tier, for anything that needs fsync durability and file
+        # locking. Not derived from storage_backend: NFS is never a valid answer
+        # here, whatever the cluster uses for bulk data. An existing cluster
+        # whose database is already on NFS overrides this until it can be dumped
+        # and restored — a PVC's storageClassName is immutable, so the move is
+        # not something a re-render can perform.
+        data.setdefault('db_storage_class', 'local-path')
+        # Whether local-path should claim the cluster-default StorageClass.
+        # nfs-subdir claims it whenever it is running, and it only runs on an
+        # NFS cluster, so the two never collide.
+        data.setdefault(
+            'local_path_is_default',
+            'true' if data.get('storage_backend') != 'nfs' else 'false',
+        )
+        # Single-node clusters must not run components that require peers. The
+        # node list is only authoritative on the manual path — the Omni path
+        # always renders `nodes: []` — so an Omni cluster that is not an
+        # appliance has to say so with `single_node`, or it is assumed to have
+        # peers. Assuming wrongly here only costs a component that would have
+        # worked; assuming the other way silently disables one that was needed.
+        if 'single_node' in data:
+            data.setdefault('is_single_node', bool(data['single_node']))
+        elif data.get('deployment_profile') == 'appliance':
+            data.setdefault('is_single_node', True)
+        elif data.get('provisioning_path') == 'talos':
+            data.setdefault('is_single_node', len(data.get('nodes') or []) <= 1)
+        else:
+            data.setdefault('is_single_node', False)
         data.setdefault('repository_branch', 'main')
         data.setdefault('repository_visibility', 'public')
 
@@ -149,4 +201,5 @@ class Plugin(makejinja.plugin.Plugin):
             cloudflare_tunnel_secret,
             github_deploy_key,
             github_push_token,
+            talos_patches,
         ]

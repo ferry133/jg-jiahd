@@ -15,11 +15,23 @@ import (
 
 	// Where stateful data lives. Databases always want block storage regardless
 	// of this — it selects what bulk media and file shares use.
-	storage_backend: "local-path" | "nfs"
+	//
+	//   local-path   node-local disk; correct on one node, pins on several
+	//   nfs          NAS-backed
+	//   replicated   Longhorn. Requires Talos system extensions on every node,
+	//                which no manifest can install — see
+	//                docs/operations/replicated-storage.md
+	storage_backend: "local-path" | "nfs" | "replicated"
 
-	// An appliance has no NAS to configure and nobody to configure it.
+	// An appliance has no NAS to configure and nobody to configure it. It is
+	// also a single node, where replication has nothing to replicate onto.
 	if deployment_profile == "appliance" {
 		storage_backend: "local-path"
+	}
+	// Replication across one node is a copy of a copy on the same disk: the
+	// cost of Longhorn with none of the protection.
+	if single_node == true {
+		storage_backend: "local-path" | "nfs"
 	}
 
 	// Whether this cluster has exactly one node. Derived where it can be —
@@ -57,10 +69,18 @@ import (
 		"freepbx/freepbx",
 	]
 
-	// Which class the block tier uses. Node-local by default. A cluster whose
-	// database is still on NFS names that class here until it can be dumped and
-	// restored — a PVC's storageClassName is immutable, so the move is not
-	// something a re-render can perform.
+	// Which class the block tier uses. Node-local by default, but `longhorn`
+	// once the cluster has replicated storage — that is the whole point of
+	// running it, and leaving the database on local-path would keep it pinned.
+	//
+	// A cluster whose database is still on NFS names that class here until it
+	// can be dumped and restored — a PVC's storageClassName is immutable, so
+	// the move is not something a re-render can perform.
+	// Deliberately one default, not one per backend. Deploying Longhorn does
+	// not move the database onto it — that is an explicit `db_storage_class:
+	// "longhorn"`. Forgetting is not silent: the database is still on a
+	// node-local class, so the pinning acknowledgement below fires and asks
+	// about exactly the thing that was forgotten.
 	db_storage_class: *"local-path" | string & !=""
 
 	// Whether anything in this cluster lands on a node-local class. This, and
@@ -69,6 +89,9 @@ import (
 	// asking about the default class would wave it through. Equally, a cluster
 	// that has deliberately parked its database on NFS is pinning nothing, and
 	// should not be asked to acknowledge what is not happening.
+	// `longhorn` is block-backed AND replicated, so it is the one block class
+	// that does not pin. Deploying replicated storage is therefore what lifts
+	// the acknowledgement, which is the correct incentive.
 	_uses_node_local: (storage_backend == "local-path") ||
 		(db_storage_class == "local-path" &&
 			len([for e in extras if list.Contains(#BlockTierExtras, e) {e}]) > 0)
@@ -156,6 +179,20 @@ import (
 	cloudflare_domain: net.FQDN
 	cloudflare_token: string
 	github_webhook_token?: string & !=""
+	// Cilium native routing instead of the default vxlan tunnel.
+	//
+	// A cluster that hosts Omni needs this: SideroLink carries WireGuard over
+	// the pod network, and vxlan's 1370-byte pod MTU is too small for it — the
+	// tunnel fails with `sendmmsg: message too long`. Removing the encapsulation
+	// allows MTU 1500 and makes DSR load balancing usable, which vxlan does not
+	// support.
+	//
+	// Requires every node on one L2 segment: native routing installs direct
+	// routes to each node's pod CIDR rather than encapsulating between them.
+	// Can be removed when the cluster no longer hosts Omni, or when SideroLink
+	// stops needing more than 1370 bytes.
+	cilium_native_routing?: bool
+
 	cilium_bgp_router_addr?: net.IPv4 & !=""
 	cilium_bgp_router_asn?: string & !=""
 	cilium_bgp_node_asn?: string & !=""
@@ -184,7 +221,24 @@ import (
 	backup_r2_access_key_id?: string & !=""
 	backup_r2_secret_access_key?: string & !=""
 
+	// Whether age.key has been escrowed somewhere outside this cluster.
+	//
+	// Backups are encrypted to the cluster's own public key, so age.key is the
+	// only thing that can read them. On a single-node appliance it lives on the
+	// one disk whose failure the backups exist to survive — an unescrowed key
+	// means the backups are ciphertext nobody can open, which is worse than no
+	// backups because it looks like protection.
+	//
+	// Declared rather than defaulted, for the same reason as
+	// accept_node_pinning: a default would answer on the operator's behalf.
+	age_key_escrowed?: bool
+
 	if deployment_profile == "appliance" {
+		// `bool` and not `true`: an absent field must fail validation.
+		age_key_escrowed: bool
+		if age_key_escrowed == false {
+			age_key_escrowed: _|_
+		}
 		backup_r2_bucket: string & !=""
 		backup_r2_endpoint: string & !=""
 		backup_r2_access_key_id: string & !=""
@@ -201,6 +255,18 @@ import (
 	// defaults to ["im"] at render time; ttyd_credential is only unused when
 	// claudecode_auth0_* switches the instances to OIDC login.
 	claude_instances?: [...string]
+	// Which claude-code instances stay running. Empty by default — each is a
+	// root shell with cluster-admin RBAC that the tunnel exposes — so a cluster
+	// that wants one standing names it here. Scaling by hand instead works
+	// until the next reconcile and then disappears without an apparent cause.
+	//
+	// A list rather than a flag because clusters do mix: jcom keeps `im` up for
+	// support and leaves `cc` at zero until it is needed.
+	claude_code_always_on?: [...string]
+	// Strength is checked by scripts/check-ttyd-credential.py, not here: a CUE
+	// constraint prints the offending value in its error, and a check that leaks
+	// the credential into a terminal and CI log to complain about it is worse
+	// than no check.
 	ttyd_credential?: string & !=""
 	claudecode_auth0_domain?: string & !=""
 	claudecode_auth0_client_id?: string & !=""
@@ -246,6 +312,15 @@ import (
 	// Opt-in: collapsing moves services off addresses that LAN clients may
 	// already be configured with.
 	lan_shared_addr?: net.IPv4 & !=""
+
+	// Deploy k8s-gateway, the in-cluster resolver for internal names. On by
+	// default everywhere, because it is the only thing that answers them:
+	// Cloudflare refuses to publish RFC1918 addresses, so there is no
+	// public-DNS route. The operator points the router's DNS at it once during
+	// installation. It shares its address with envoy-internal and mqtt, so it
+	// costs nothing extra. Turn it off only where something else resolves those
+	// names.
+	k8s_gateway?: bool
 	cloudflare_lan_tunnel_token?: string & !=""
 	// monitoring/daily-check (base app on every cluster). Fields stay optional:
 	// an unconfigured cluster's CronJob exits 0 with a "not configured" log

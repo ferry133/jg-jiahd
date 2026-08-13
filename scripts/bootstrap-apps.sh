@@ -137,8 +137,29 @@ function sync_helm_releases() {
 }
 
 function main() {
-    check_env KUBECONFIG TALOSCONFIG
-    check_cli helmfile kubectl kustomize sops talhelper yq
+    check_env KUBECONFIG
+    check_cli helmfile kubectl kustomize sops yq
+
+    # Prerequisites that belong to one provisioning path must not gate the other.
+    # The path is read from cluster.yaml rather than inferred from which files
+    # happen to exist: nodes.yaml is materialised for every repo, so its presence
+    # proves nothing, and a leftover talos/ directory would mislead too.
+    local provisioning_path
+    provisioning_path="$(yq --exit-status '.provisioning_path' "${ROOT_DIR}/cluster.yaml" 2>/dev/null || true)"
+    case "${provisioning_path}" in
+        omni)
+            log debug "Omni provisioning path, skipping talhelper prerequisites"
+            ;;
+        talos)
+            # The manual path is driven by talhelper against a generated talosconfig.
+            check_env TALOSCONFIG
+            check_cli talhelper
+            ;;
+        *)
+            log error "cluster.yaml must declare provisioning_path" \
+                "value=${provisioning_path:-<unset>}" "expected=omni|talos"
+            ;;
+    esac
 
     # Apply resources and Helm releases
     wait_for_nodes

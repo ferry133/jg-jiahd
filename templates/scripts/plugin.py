@@ -148,10 +148,11 @@ class Plugin(makejinja.plugin.Plugin):
         # Storage class for PVCs that do not pick one explicitly. Databases are
         # block-backed regardless — this selects what bulk media and file shares
         # get, which is the only thing the backend axis decides.
-        data.setdefault(
-            'default_storage_class',
-            'sc-nas' if data.get('storage_backend') == 'nfs' else 'local-path',
-        )
+        _backend = data.get('storage_backend')
+        data.setdefault('default_storage_class', {
+            'nfs': 'sc-nas',
+            'replicated': 'longhorn',
+        }.get(_backend, 'local-path'))
         # The block tier, for anything that needs fsync durability and file
         # locking. Not derived from storage_backend: NFS is never a valid answer
         # here, whatever the cluster uses for bulk data. An existing cluster
@@ -159,6 +160,25 @@ class Plugin(makejinja.plugin.Plugin):
         # and restored — a PVC's storageClassName is immutable, so the move is
         # not something a re-render can perform.
         data.setdefault('db_storage_class', 'local-path')
+        # Which claude-code instances stay up. Empty by default: each is a root
+        # shell with cluster-admin that the tunnel makes reachable. Named here
+        # rather than scaled by hand, which works until the next reconcile.
+        data.setdefault('claude_code_always_on', [])
+        # Backups are encrypted to the cluster's own age public key, taken from
+        # .sops.yaml rather than added as another field to fill in. The key is
+        # already there, it is already the thing that travels with the cluster
+        # at handover, and a public key is not a secret. The consequence worth
+        # stating: whoever holds age.key can read the backups, and nobody else
+        # can — including the operator holding the R2 credentials.
+        if 'backup_age_recipient' not in data:
+            sops_config = Path('.sops.yaml')
+            recipient = ''
+            if sops_config.is_file():
+                match = re.search(r'age:\s*["\']?(age1[a-z0-9]+)',
+                                  sops_config.read_text())
+                if match:
+                    recipient = match.group(1)
+            data['backup_age_recipient'] = recipient
         # The three LAN-facing services listen on non-overlapping ports
         # (80/443, 53, 1883), so one address serves all of them. Collapsing them
         # turns "find several free addresses on a LAN you have never seen" into
@@ -172,20 +192,52 @@ class Plugin(makejinja.plugin.Plugin):
         # deliberately by setting lan_shared_addr.
         shared = data.get('lan_shared_addr')
         if shared:
+            # Unconditional, not "only if already set". An appliance declares
+            # none of these — validation forbids them — so a conditional
+            # overwrite would leave them empty and the Gateway annotations null,
+            # which is the one shape the Gateway CRD rejects. This field is
+            # documented as superseding them, so it supersedes an absent one too.
             for field in ('cluster_gateway_addr', 'cluster_dns_gateway_addr',
                           'mqtt_lb_ip'):
-                if data.get(field):
-                    data[field] = shared
+                data[field] = shared
         # Empty is not a sharing key that everything shares — Cilium treats it
         # as no key at all, verified on jgt-omni. So the annotations can sit in
         # jg-base unconditionally and stay inert on clusters that do not share.
-        data.setdefault('lan_sharing_key', 'lan' if shared else '')
+        # k8s-gateway answers internal names for clients whose resolver points
+        # at it. That is the primary path everywhere, including appliance:
+        # Cloudflare refuses to publish RFC1918 answers (D29), so there is no
+        # public-DNS route to fall back from. The operator points the router's
+        # DNS at it once during installation (D32).
+        #
+        # It costs no extra address — 4.3 shares one with envoy-internal and
+        # mqtt — so the only reason to turn it off is a cluster that runs its
+        # own resolver.
+        data.setdefault(
+            'deploy_k8s_gateway',
+            bool(data['k8s_gateway']) if 'k8s_gateway' in data else True)
+        # A LoadBalancer on every profile, appliance included. The appliance used
+        # to make it a ClusterIP on the reasoning that nothing on the LAN
+        # connects to it — cloudflared reaches it by in-cluster DNS. That
+        # reasoning missed k8s-gateway, which answers a hostname from whatever
+        # address its parent Gateway holds: on jgt-appliance every externally
+        # routed name resolved to a ClusterIP no LAN client could reach. The
+        # probe now finds a second address for it instead.
+        data.setdefault('envoy_external_service_type', 'LoadBalancer')
+        # An appliance shares whether or not the address is declared yet. It
+        # discovers exactly one address, so on the first boot — before anything
+        # is pinned — every LAN service has to share that one or all but the
+        # first sit <pending> forever. Keying off `shared` alone left them with
+        # jg-base's per-service defaults, which differ by service and therefore
+        # share nothing: measured on jgt-appliance, k8s-gateway took 10.9.1.254
+        # under key "k8s-gateway" and envoy-internal waited under "envoy-internal".
+        share_lan = bool(shared) or data.get('deployment_profile') == 'appliance'
+        data.setdefault('lan_sharing_key', 'lan' if share_lan else '')
         # An explicit namespace list, never "*": kustomize strips the quotes
         # around a substituted scalar, and a bare `*` is a YAML alias, so the
         # whole manifest fails to parse after substitution. Naming the two
         # namespaces is also the smaller permission.
         data.setdefault('lan_sharing_cross_namespace',
-                        'network,mqtt' if shared else '')
+                        'network,mqtt' if share_lan else '')
         # Every address this cluster actually hands to a LoadBalancer, so the
         # pool can stop covering the customer's entire LAN. `cluster_api_addr`
         # is deliberately absent: it is a Talos VIP, not a Service.
@@ -211,8 +263,15 @@ class Plugin(makejinja.plugin.Plugin):
         # overlap with PoolConflict=cidr_overlap whether or not the wide one is
         # disabled. So a cluster with nothing to enumerate writes out the whole
         # node CIDR here, which is what it was getting implicitly anyway.
-        blocks = ([{'start': a, 'stop': a} for a in addrs] if addrs
-                  else [{'cidr': str(data.get('node_cidr'))}])
+        if addrs:
+            blocks = [{'start': a, 'stop': a} for a in addrs]
+        elif data.get('deployment_profile') == 'appliance':
+            # An appliance declares no addresses; lan-address-probe discovers one
+            # and publishes it as a second pool. This one stays empty so the two
+            # cannot overlap — Cilium rejects overlapping pools outright.
+            blocks = []
+        else:
+            blocks = [{'cidr': str(data.get('node_cidr'))}]
         data.setdefault('lb_pool_blocks',
                         json.dumps(blocks, separators=(',', ':')))
         # Whether local-path should claim the cluster-default StorageClass.

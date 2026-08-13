@@ -8,14 +8,17 @@ vars:
   BOOTSTRAP_DIR: '{{.ROOT_DIR}}/bootstrap'
   KUBERNETES_DIR: '{{.ROOT_DIR}}/kubernetes'
   SCRIPTS_DIR: '{{.ROOT_DIR}}/scripts'
-  PRIVATE_DIR: '{{.ROOT_DIR}}/.private'
+  TALOS_DIR: '{{.ROOT_DIR}}/talos'
+  TALOSCONFIG: '{{.ROOT_DIR}}/talos/clusterconfig/talosconfig'
 
 env:
   KUBECONFIG: '{{.ROOT_DIR}}/kubeconfig'
   SOPS_AGE_KEY_FILE: '{{.ROOT_DIR}}/age.key'
+  TALOSCONFIG: '{{.TALOSCONFIG}}'
 
 includes:
   bootstrap: .taskfiles/bootstrap
+  talos: .taskfiles/talos
   template: .taskfiles/template
 
 tasks:

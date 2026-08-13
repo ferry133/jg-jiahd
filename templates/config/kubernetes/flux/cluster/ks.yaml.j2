@@ -113,6 +113,18 @@ spec:
      registry to a local port that nothing answers. #|
 #% set _ = _disabled.append(('spegel', 'single-node cluster: a peer-to-peer image mirror has no peers')) %#
 #% endif %#
+#% if storage_backend != 'replicated' %#
+#|   Longhorn is heavier than the other provisioners and, unlike them, does not
+     work at all until every node carries the iscsi-tools and util-linux-tools
+     Talos extensions — which no manifest can install. #|
+#% set _ = _disabled.append(('longhorn', 'storage_backend is ' ~ storage_backend ~ '; replicated storage also needs Talos system extensions on every node')) %#
+#% endif %#
+#% if deployment_profile != 'appliance' %#
+#|   Only an appliance is expected to land on a LAN nobody has surveyed. Every
+     other profile declares its addresses in cluster.yaml, and a probe writing a
+     second pool there would overlap the declared one. #|
+#% set _ = _disabled.append(('lan-address-probe', 'this profile declares its LAN addresses in cluster.yaml, so there is nothing to discover')) %#
+#% endif %#
 #% for name, why in _disabled %#
     # suspended: #{ why }#
     - patch: |-

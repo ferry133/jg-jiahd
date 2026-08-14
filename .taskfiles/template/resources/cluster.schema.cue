@@ -34,6 +34,31 @@ import (
 		storage_backend: "local-path" | "nfs"
 	}
 
+	// Whether Longhorn is installed, independent of which tier bulk data uses.
+	// `storage_backend: "replicated"` means "Longhorn, and it is also the bulk
+	// tier"; this means "Longhorn is available" and leaves bulk where it is.
+	//
+	// A NAS-backed cluster with several nodes needs exactly that combination: the
+	// NAS is right for bulk and wrong for a database, and the only class that is
+	// block-backed without pinning the pod to one node is Longhorn. Expressing it
+	// through storage_backend alone is not possible — that field also decides
+	// whether nfs-subdir runs, so asking for Longhorn there takes the NAS away
+	// from everything already on it.
+	//
+	// Installing it does not move any database onto it; that is db_storage_class
+	// below, and it is a separate step because storageClassName is immutable and
+	// moving means dump and restore.
+	//
+	// Defaults to whether storage_backend is "replicated" — declared here without
+	// a value so the derivation lives in exactly one place (see plugin.py).
+	replicated_storage?: bool
+
+	// Same reasoning as storage_backend above: two replicas on one machine are
+	// two copies of one disk.
+	if single_node == true {
+		replicated_storage?: false
+	}
+
 	// Whether this cluster has exactly one node. Derived where it can be —
 	// appliance is single by definition, and the manual path has an authoritative
 	// node list — but an Omni-provisioned cluster renders `nodes: []`, so it must

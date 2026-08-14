@@ -281,6 +281,20 @@ class Plugin(makejinja.plugin.Plugin):
             'local_path_is_default',
             'true' if data.get('storage_backend') != 'nfs' else 'false',
         )
+        # Whether Longhorn is installed. `storage_backend: "replicated"` implies
+        # it, but a NAS-backed cluster can ask for it too — the NAS is right for
+        # bulk and wrong for a database, and Longhorn is the one block class that
+        # does not pin the pod to a node. Those clusters cannot say so through
+        # storage_backend, which also decides whether nfs-subdir runs.
+        #
+        # This is not db_storage_class: installing the tier and moving a database
+        # onto it are separate, because storageClassName is immutable and moving
+        # means dump and restore. Keeping them separate is what lets the install
+        # be verified before anything depends on it.
+        data.setdefault(
+            'deploy_longhorn',
+            bool(data['replicated_storage']) if 'replicated_storage' in data
+            else data.get('storage_backend') == 'replicated')
         # Single-node clusters must not run components that require peers. The
         # node list is only authoritative on the manual path — the Omni path
         # always renders `nodes: []` — so an Omni cluster that is not an

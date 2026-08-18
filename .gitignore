@@ -9,7 +9,7 @@ auth0.json
 .sops.yaml
 /bootstrap/
 /talos/
-kubeconfig
+kubeconfig*
 trello-notifier.yaml
 .venv/
 .claude/
@@ -17,6 +17,5 @@ trello-notifier.yaml
 # Per-cluster config (non-sensitive but not part of template)
 cluster.yaml
 nodes.yaml
-kubeconfig-sa
 omniconfig.yaml
 .env.claude

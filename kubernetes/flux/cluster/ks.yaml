@@ -105,7 +105,7 @@ spec:
         group: kustomize.toolkit.fluxcd.io
         kind: Kustomization
         name: lan-address-probe
-    # enabled: longhorn_backup_target is set, so there is somewhere for the RecurringJob to write
+    # disabled (empty path, so anything previously applied is pruned): no longhorn_backup_target: an empty path so Flux prunes the RecurringJob, rather than a suspend that would strand it
     - patch: |-
         apiVersion: kustomize.toolkit.fluxcd.io/v1
         kind: Kustomization
@@ -114,7 +114,7 @@ spec:
           namespace: flux-system
         spec:
           suspend: false
-          path: ./kubernetes/apps/base/storage/longhorn/backup/enabled
+          path: ./kubernetes/apps/base/storage/longhorn/backup/disabled
       target:
         group: kustomize.toolkit.fluxcd.io
         kind: Kustomization

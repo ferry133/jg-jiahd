@@ -64,23 +64,26 @@ def value_of(text: str, key: str) -> str | None:
     return m.group(1).strip().strip('"').strip("'")
 
 
-def patched_suspend(ks_text: str, name: str) -> bool | None:
-    """What the per-user ks.yaml patches `suspend` to for Kustomization `name`.
+def patched(ks_text: str, name: str) -> tuple[bool | None, str | None]:
+    """What the per-user ks.yaml patches (suspend, path) to for `name`.
 
-    True / False as patched, None if no patch targets it. Matching is per
-    `- patch: |-` block and anchored on the whole name, so `longhorn` and
-    `longhorn-backup` are never confused for each other -- a distinction this
-    check depends on entirely.
+    None for either field means no patch set it. Matching is per `- patch: |-`
+    block and anchored on the whole name, so `longhorn` and `longhorn-backup`
+    are never confused for each other -- a distinction this check depends on
+    entirely.
     """
-    result = None
+    suspend = path = None
     for block in ks_text.split('- patch: |-')[1:]:
         head = block.split('- patch: |-')[0]
         if not re.search(rf'^\s+name:\s*{re.escape(name)}\s*$', head, re.M):
             continue
         m = re.search(r'^\s+suspend:\s*(true|false)\s*$', head, re.M)
         if m:
-            result = m.group(1) == 'true'
-    return result
+            suspend = m.group(1) == 'true'
+        m = re.search(r'^\s+path:\s*(\S+)\s*$', head, re.M)
+        if m:
+            path = m.group(1)
+    return suspend, path
 
 
 def main() -> int:
@@ -107,46 +110,61 @@ def main() -> int:
         return 2
 
     ks_text = cluster_ks.read_text()
-    backup_patch = patched_suspend(ks_text, 'longhorn-backup')
-    longhorn_patch = patched_suspend(ks_text, 'longhorn')
+    b_suspend, b_path = patched(ks_text, 'longhorn-backup')
+    l_suspend, _ = patched(ks_text, 'longhorn')
 
     has_target = bool(target)
-    # jg-base ships longhorn-backup suspended, so no patch means off.
-    backup_on = backup_patch is False
+    want = 'enabled' if has_target else 'disabled'
+    position = b_path.rsplit('/', 1)[-1] if b_path else None
     # longhorn itself ships active, so no patch means on.
-    longhorn_on = longhorn_patch is not True
+    longhorn_on = l_suspend is not True
+
+    print(f'LONGHORN_BACKUP_TARGET = {target!r}')
+    print(f'longhorn-backup patch  = suspend={b_suspend}, path={b_path}')
+    print(f'  wanted position      = {want}')
+    print(f'longhorn               = {"active" if longhorn_on else "suspended"}')
+    print()
+
+    if b_path is None and b_suspend is None:
+        print('COULD NOT MEASURE  nothing in flux/cluster/ks.yaml patches')
+        print('  Kustomization/longhorn-backup. This repo\'s templates/ predate')
+        print('  ferry133/jg-base#29, which made that patch unconditional.')
+        print()
+        print('  Whether it matters depends on history this check cannot see:')
+        print('  with no patch the Kustomization keeps jg-base\'s suspended')
+        print('  default, which is right for a cluster that never turned')
+        print('  backups on and WRONG for one that did -- suspend does not')
+        print('  remove the RecurringJob it already created. Sync templates/')
+        print('  from jg-cluster-template, then re-run.')
+        return 2
 
     failed = []
 
-    if has_target and not backup_on:
+    if b_suspend is not False:
         failed.append(
-            f'a backup target is set ({target}) but nothing un-suspends '
-            'Kustomization/longhorn-backup, so the RecurringJob is never '
-            'applied: Longhorn would have a target and never write to it')
-    if not has_target and backup_on:
+            f'the patch leaves suspend={b_suspend}. Off must be an empty path '
+            'on a Kustomization that still reconciles, never a suspend: '
+            'suspending strands the RecurringJob in longhorn-system and '
+            'silences the only object that would report it, at the same moment')
+    if position != want:
         failed.append(
-            'Kustomization/longhorn-backup is un-suspended with no '
-            'LONGHORN_BACKUP_TARGET, so the RecurringJob runs and fails '
-            'nightly against an unset target')
+            f'patched path selects {position!r} but the target says {want!r} '
+            + ('(a target is set, so the RecurringJob must actually be applied)'
+               if has_target else
+               '(no target, so the path must be the empty directory or Flux '
+               'never prunes what a previous render applied)'))
     if has_target and not target.startswith(SCHEMES):
         failed.append(
             f'LONGHORN_BACKUP_TARGET {target!r} has no scheme Longhorn '
             f'accepts ({", ".join(SCHEMES)}); the BackupTarget CR reports '
             'available: false, which looks the same as an unreachable NAS')
-    if backup_on and not longhorn_on:
+    if has_target and not longhorn_on:
         failed.append(
-            'longhorn-backup is un-suspended but this cluster suspends '
+            'a backup target is set but this cluster suspends '
             'Kustomization/longhorn, so the RecurringJob is applied against a '
             'CRD no chart installs. Set replicated_storage: true (or '
             'storage_backend: "replicated") if Longhorn is wanted here, or '
             'drop longhorn_backup_target if it is not')
-
-    print(f'LONGHORN_BACKUP_TARGET = {target!r}')
-    print(f'longhorn-backup        = {"un-suspended" if backup_on else "suspended"}'
-          f'  (patch: {backup_patch})')
-    print(f'longhorn               = {"active" if longhorn_on else "suspended"}'
-          f'  (patch: {longhorn_patch})')
-    print()
 
     if failed:
         for f in failed:
@@ -154,12 +172,11 @@ def main() -> int:
         return 1
 
     if not has_target:
-        print('ok - no Longhorn backup configured; longhorn-backup stays')
-        print('     suspended as jg-base ships it, and the chart render is')
-        print('     byte-identical to a cluster that never had this variable')
-        print('     (measured with helm template).')
+        print('ok - no Longhorn backup configured, and the switch is in the')
+        print('     empty position rather than suspended, so anything a')
+        print('     previous render applied is pruned rather than stranded.')
     else:
-        print('ok - target set, longhorn-backup un-suspended, Longhorn installed.')
+        print('ok - target set, switch in the enabled position, Longhorn installed.')
         print()
         print('     NOT checked here, and not checkable from a template repo:')
         print('     whether the export accepts writes from longhorn')

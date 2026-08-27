@@ -127,6 +127,11 @@ storage_backend: "nfs"
 # written to by longhorn instance-manager. A backup target that has never
 # restored is a hypothesis.
 # longhorn_backup_target: "nfs://10.9.2.13:/volume3/backup1/longhorn"
+#
+# 關掉的方式是把這一行拿掉（或留空）再 `task configure`。**不要用 suspend 關**——
+# 那會讓 RecurringJob 留在 longhorn-system 裡，同時把唯一會報告它的 Flux 物件靜音。
+# 拿掉這一行之後 render 出來的是一個指向空目錄、但仍在 reconcile 的 Kustomization，
+# Flux 才會把它 prune 掉（ferry133/jg-base#29）。
 
 # (OPTIONAL) Which storage class databases use. Defaults to "local-path" and
 # deliberately does not follow storage_backend — NFS is never a correct answer
@@ -143,6 +148,16 @@ storage_backend: "nfs"
 # move the database onto it by itself. Forgetting is caught rather than silent:
 # the database stays on a node-local class, so accept_node_pinning is demanded
 # and names the thing that was missed.
+#
+# The opposite mistake — naming a class this cluster will not install — is
+# caught by `task configure` before it renders anything (issue #1). "longhorn"
+# without Longhorn and "sc-nas" without the NFS provisioner both stop the run
+# and name the missing field. A class this repo does not install is accepted in
+# silence: an out-of-band CSI driver is legitimate and unknowable here.
+#
+# Why it needs a check at all: a PVC naming a class that does not exist does not
+# fail. It sits Pending, every Kustomization reports Ready, and the only symptom
+# is one pod that never starts.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # §1. BASE (required for this profile)
@@ -185,14 +200,31 @@ cloudflare_gateway_addr: "10.9.9.5"   # envoy-external LB IP
 
 # Optional network overrides (the commented value is the actual default):
 # node_default_gateway: "10.9.9.1"                     # default: .1 of node_cidr
-# node_dns_servers: ["1.1.1.1", "1.0.0.1"]             # default: Cloudflare DNS
-#   ^ this field is also daily-check's switch for check 18 ("LAN resolves
-#     internal names"). The default is a PUBLIC resolver, so a node cannot see
-#     what a LAN client sees and the check reports "not measured" — nothing
-#     watches the router on a default cluster. Point it at an all-private list
-#     (the router, or the cluster's own k8s-gateway) and the probe turns on:
-#         node_dns_servers: ["10.9.1.1"]
-#     One public entry anywhere in the list switches it back off.
+# node_dns_servers: ["10.9.9.1"]                       # default: node_default_gateway (the LAN's router)
+#   ^ changed 2026-08-27. It used to default to Cloudflare (["1.1.1.1",
+#     "1.0.0.1"]), which meant a node could not see what a LAN client sees:
+#     `internal.<domain>` is deliberately not published publicly, so anything
+#     running on that node — including the `im` rescue terminal — got NXDOMAIN
+#     for every internal name.
+#
+#     This field is also daily-check's switch for check 18 ("LAN resolves
+#     internal names"): the derivation is all-entries-private → `lan`. Under the
+#     old default every cluster derived `public` and nothing watched the router.
+#
+#     The address must do BOTH jobs — ordinary recursion AND forwarding the
+#     cluster domain. That is why it is the router and not the shared LAN
+#     address: pointing this at k8s-gateway would make node name resolution
+#     depend on the cluster it is meant to bring up. Verify both before relying
+#     on it:
+#         dig @10.9.9.1 github.com              # recursion
+#         dig @10.9.9.1 internal.<domain>       # forwards the cluster domain
+#
+#     One public entry anywhere in the list switches check 18 back off, so a
+#     public fallback costs the check. That trade-off was put to ferry133 on
+#     2026-08-27 and settled as: single entry, the router. A second reason not
+#     to add one — CoreDNS's forward plugin picks among multiple upstreams at
+#     random by default, so internal names would resolve on roughly half of all
+#     queries rather than failing over cleanly.
 # node_ntp_servers: ["162.159.200.1", "162.159.200.123"]
 # node_vlan_tag: ""                                    # https://www.talos.dev/latest/advanced/advanced-networking/#vlans
 # cluster_api_tls_sans: ["mycluster.example.com"]
@@ -215,23 +247,6 @@ cloudflare_domain: "example.com"
 
 # (REQUIRED) API Token: Zone:DNS:Edit + Account:Cloudflare Tunnel:Read
 cloudflare_token: ""
-
-# (OPTIONAL) How cloudflared reaches Cloudflare's edge: "quic" (default, UDP
-# 7844) or "http2" (TCP 443).
-#
-# Set this to "http2" ONLY after observing the symptom, because http2 costs
-# real bandwidth: cloudflared in CrashLoopBackOff logging
-#   Failed to dial a quic connection: timeout: handshake did not complete in time
-# while TCP 443 works — i.e. the site's egress blocks outbound UDP.
-#
-# It is not a token problem. Rotating the token issues a new credential and
-# produces the identical crash, and that is the first thing everyone tries.
-#
-# `scripts/provision.py quic-repair --kubeconfig ./kubeconfig-sa` detects the
-# symptom and sets this. It deliberately refuses when the value is already
-# http2 and the errors continue — that means the value never reached the
-# cluster, which is a fact about the render and not about the network.
-# cloudflare_tunnel_transport: "http2"
 
 # Main Cloudflare Tunnel:
 #   TOKEN + ID are read from `cloudflare-tunnel.json` (local, gitignored).

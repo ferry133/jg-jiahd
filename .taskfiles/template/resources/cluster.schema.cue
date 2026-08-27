@@ -241,23 +241,6 @@ import (
 	repository_visibility?: *"public" | "private"
 	cloudflare_domain: net.FQDN
 	cloudflare_token: string
-	// How cloudflared reaches Cloudflare's edge.
-	//
-	// Default "quic" is UDP 7844. Some networks — measured on jg-jiahd — block
-	// outbound UDP while TCP 443 works, and cloudflared then CrashLoopBackOffs
-	// with `Failed to dial a quic connection: timeout: handshake did not complete
-	// in time`. It is not a token problem and rotating the token does not help;
-	// it produces a new credential and the identical crash.
-	//
-	// This exists as a field because the documented fix used to be a nested
-	// patch pasted by hand into this repo's rendered ks.yaml — which meant the
-	// repair lived only in whichever clone someone had pasted it into, and the
-	// next `task configure` by anyone else silently undid it. A value survives a
-	// re-render; an edit to a generated file does not.
-	//
-	// Left per-cluster rather than changed in jg-base: every other cluster's QUIC
-	// works, and http2 carries a real bandwidth cost.
-	cloudflare_tunnel_transport?: "quic" | "http2"
 	github_webhook_token?: string & !=""
 	// Cilium native routing instead of the default vxlan tunnel.
 	//

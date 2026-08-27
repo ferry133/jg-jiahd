@@ -89,39 +89,6 @@ spec:
               target:
                 group: helm.toolkit.fluxcd.io
                 kind: HelmRelease
-#|         The QUIC repair, when this cluster's egress blocks UDP 7844.
-
-           It goes HERE, inside the nested patches list, and not as another
-           entry in the outer `patches:` below — for the same reason the
-           suspend patches further down are scalar-only. A second outer patch
-           that set `spec.patches` would replace this whole nested list
-           wholesale, taking the generic HelmRelease strategy with it.
-
-           Rendered from cluster.yaml rather than pasted into the generated
-           file, so it survives the next `task configure`. Before the field
-           existed the fix lived in one person's clone and the next render
-           removed it without saying so. #|
-#% if (cloudflare_tunnel_transport | default('quic')) == 'http2' %#
-            # cloudflare_tunnel_transport: http2 — this site's egress blocks UDP 7844.
-            - patch: |-
-                apiVersion: helm.toolkit.fluxcd.io/v2
-                kind: HelmRelease
-                metadata:
-                  name: cloudflare-tunnel
-                spec:
-                  values:
-                    controllers:
-                      cloudflare-tunnel:
-                        containers:
-                          app:
-                            env:
-                              TUNNEL_POST_QUANTUM: false
-                              TUNNEL_TRANSPORT_PROTOCOL: http2
-              target:
-                group: helm.toolkit.fluxcd.io
-                kind: HelmRelease
-                name: cloudflare-tunnel
-#% endif %#
       target:
         group: kustomize.toolkit.fluxcd.io
         kind: Kustomization
@@ -201,11 +168,36 @@ spec:
      on ferry133/jg-base#28. The extras pattern survives only because extras
      are unreachable from apps/base and CI has never walked one. #|
 #% set _enabled = [] %#
-#% if longhorn_backup_target is defined and longhorn_backup_target %#
-#% set _ = _enabled.append(('longhorn-backup', 'longhorn_backup_target is set, so there is somewhere for the RecurringJob to write')) %#
-#% endif %#
-#% for name, why in _enabled %#
-    # un-suspended: #{ why }#
+#|   longhorn-backup is emitted ALWAYS, in one of two positions -- not only when
+     a target is set (ferry133/jg-base#29).
+
+     The obvious version appends only when longhorn_backup_target is set, so
+     removing the target removes the patch and jg-base's `suspend: true` comes
+     back. That turns it off in git and not on the cluster: **suspend stops
+     reconciliation, it does not delete what reconciliation already created.**
+     The daily-backup RecurringJob stays in longhorn-system, and the one Flux
+     object that would have reported it goes quiet in the same instant.
+
+     Measured on a different app: 2026-08-19, jcom had lan-address-probe
+     suspended=true with its Deployment still running 7 days later and a stray
+     pool-discovered no Service used.
+
+     So off is `path: .../backup/disabled`, an empty directory, with the
+     Kustomization still reconciling. Its inventory goes empty and Flux prunes
+     the RecurringJob.
+
+     A cluster that has never re-rendered emits no patch at all and keeps
+     jg-base's suspended default -- correct, because it never turned anything
+     on, and an object that has never reconciled has no status.conditions for
+     daily-check to trip over. #|
+#% set _ = _enabled.append((
+     'longhorn-backup',
+     'enabled' if (longhorn_backup_target is defined and longhorn_backup_target) else 'disabled',
+     'longhorn_backup_target is set, so there is somewhere for the RecurringJob to write'
+        if (longhorn_backup_target is defined and longhorn_backup_target)
+        else 'no longhorn_backup_target: an empty path so Flux prunes the RecurringJob, rather than a suspend that would strand it')) %#
+#% for name, position, why in _enabled %#
+    # #{ 'enabled' if position == 'enabled' else 'disabled (empty path, so anything previously applied is pruned)' }#: #{ why }#
     - patch: |-
         apiVersion: kustomize.toolkit.fluxcd.io/v1
         kind: Kustomization
@@ -214,6 +206,7 @@ spec:
           namespace: flux-system
         spec:
           suspend: false
+          path: ./kubernetes/apps/base/storage/longhorn/backup/#{ position }#
       target:
         group: kustomize.toolkit.fluxcd.io
         kind: Kustomization

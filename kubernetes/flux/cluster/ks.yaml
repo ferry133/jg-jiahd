@@ -105,7 +105,7 @@ spec:
         group: kustomize.toolkit.fluxcd.io
         kind: Kustomization
         name: lan-address-probe
-    # un-suspended: longhorn_backup_target is set, so there is somewhere for the RecurringJob to write
+    # enabled: longhorn_backup_target is set, so there is somewhere for the RecurringJob to write
     - patch: |-
         apiVersion: kustomize.toolkit.fluxcd.io/v1
         kind: Kustomization
@@ -114,6 +114,7 @@ spec:
           namespace: flux-system
         spec:
           suspend: false
+          path: ./kubernetes/apps/base/storage/longhorn/backup/enabled
       target:
         group: kustomize.toolkit.fluxcd.io
         kind: Kustomization

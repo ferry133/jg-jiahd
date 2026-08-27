@@ -20,7 +20,7 @@ import (
 	//   nfs          NAS-backed
 	//   replicated   Longhorn. Requires Talos system extensions on every node,
 	//                which no manifest can install — see
-	//                docs/operations/replicated-storage.md
+	//                fleet-ops docs/operations/replicated-storage.md
 	storage_backend: "local-path" | "nfs" | "replicated"
 
 	// An appliance has no NAS to configure and nobody to configure it. It is
@@ -57,6 +57,44 @@ import (
 	// two copies of one disk.
 	if single_node == true {
 		replicated_storage?: false
+	}
+
+	// Where Longhorn writes its backups. Optional, and absent means no Longhorn
+	// backups at all — which is what every cluster did before this existed.
+	//
+	// Longhorn's replica count survives a node dying. It does not survive
+	// `kubectl delete pvc` or a corrupt table: both are replicated faithfully to
+	// every replica. This is the only thing in the stack that does.
+	//
+	// A URL, not a bool, because the destination is per-cluster and unguessable
+	// — it is a LAN NAS export that most clusters cannot reach, which is exactly
+	// why it cannot be hardcoded in jg-base. Longhorn accepts nfs://, cifs://,
+	// s3://, azblob:// and gcs://; only NFS is exercised here.
+	//
+	// jg-base derives the on/off selector from whether this is set, so there is
+	// no second field to keep in agreement with it (see plugin.py).
+	// Defaulted rather than optional, so the guard below can actually read it.
+	// `longhorn_backup_target?: string` with `if longhorn_backup_target != _|_`
+	// looks like the same thing and is not: that comparison never fires, and a
+	// guard that never fires reads exactly like one that passes. Caught by
+	// running the negative control instead of only the positive one.
+	longhorn_backup_target: *"" | string
+
+	// Backing up a Longhorn volume requires Longhorn.
+	//
+	// ⚠️ This catches HALF the problem and it is worth knowing which half.
+	// It fires on the outright contradiction — a target together with an
+	// explicit `replicated_storage: false` — measured: "conflicting values
+	// true and false". It does NOT fire when `replicated_storage` is simply
+	// absent, because defining an optional field is not a conflict, and
+	// plugin.py derives `deploy_longhorn` from cluster.yaml rather than from
+	// CUE's unified value, so this line changes nothing about the render.
+	//
+	// The absent case is the one that happens, and it is covered by
+	// scripts/check-longhorn-backup.py against the rendered artifacts. Do not
+	// read this block as the guard; it is the cheap half of one.
+	if longhorn_backup_target != "" {
+		replicated_storage: true
 	}
 
 	// Whether this cluster has exactly one node. Derived where it can be —
@@ -203,6 +241,23 @@ import (
 	repository_visibility?: *"public" | "private"
 	cloudflare_domain: net.FQDN
 	cloudflare_token: string
+	// How cloudflared reaches Cloudflare's edge.
+	//
+	// Default "quic" is UDP 7844. Some networks — measured on jg-jiahd — block
+	// outbound UDP while TCP 443 works, and cloudflared then CrashLoopBackOffs
+	// with `Failed to dial a quic connection: timeout: handshake did not complete
+	// in time`. It is not a token problem and rotating the token does not help;
+	// it produces a new credential and the identical crash.
+	//
+	// This exists as a field because the documented fix used to be a nested
+	// patch pasted by hand into this repo's rendered ks.yaml — which meant the
+	// repair lived only in whichever clone someone had pasted it into, and the
+	// next `task configure` by anyone else silently undid it. A value survives a
+	// re-render; an edit to a generated file does not.
+	//
+	// Left per-cluster rather than changed in jg-base: every other cluster's QUIC
+	// works, and http2 carries a real bandwidth cost.
+	cloudflare_tunnel_transport?: "quic" | "http2"
 	github_webhook_token?: string & !=""
 	// Cilium native routing instead of the default vxlan tunnel.
 	//
@@ -218,10 +273,6 @@ import (
 	// stops needing more than 1370 bytes.
 	cilium_native_routing?: bool
 
-	cilium_bgp_router_addr?: net.IPv4 & !=""
-	cilium_bgp_router_asn?: string & !=""
-	cilium_bgp_node_asn?: string & !=""
-	cilium_loadbalancer_mode?: *"dsr" | "snat"
 	// NAS — only meaningful when bulk storage is NFS-backed. nas_coding_path
 	// stays optional even then: without it the claude-code workspace falls back
 	// to the profile's default storage class.
@@ -277,8 +328,7 @@ import (
 	claudecode_postgres_password?: string & !=""
 	claude_code_database_url?: string
 	// claudecode/claude-code (base app on every cluster). claude_instances
-	// defaults to ["im"] at render time; ttyd_credential is only unused when
-	// claudecode_auth0_* switches the instances to OIDC login.
+	// defaults to ["im"] at render time.
 	claude_instances?: [...string]
 	// Which claude-code instances stay running. Empty by default — each is a
 	// root shell with cluster-admin RBAC that the tunnel exposes — so a cluster
@@ -288,14 +338,25 @@ import (
 	// A list rather than a flag because clusters do mix: jcom keeps `im` up for
 	// support and leaves `cc` at zero until it is needed.
 	claude_code_always_on?: [...string]
-	// Strength is checked by scripts/check-ttyd-credential.py, not here: a CUE
-	// constraint prints the offending value in its error, and a check that leaks
-	// the credential into a terminal and CI log to complain about it is worse
-	// than no check.
+	// Auth0 OIDC login in front of every claude-code instance. Defaults to true
+	// at render time; the four claudecode_auth0_* / allowed_emails values come
+	// from the gitignored auth0.json unless set here.
+	//
+	// Setting it false falls back to ttyd basic auth, which then needs
+	// ttyd_credential — checked by scripts/check-claudecode-auth.py.
+	claudecode_auth0?: bool
+	// Only used when claudecode_auth0 is false. Strength is checked by
+	// scripts/check-claudecode-auth.py, not here: a CUE constraint prints the
+	// offending value in its error, and a check that leaks the credential into
+	// a terminal and CI log to complain about it is worse than no check.
 	ttyd_credential?: string & !=""
+	// Each overrides the matching field in auth0.json. Rarely needed — every
+	// cluster fronts claude-code with the same Auth0 application.
 	claudecode_auth0_domain?: string & !=""
 	claudecode_auth0_client_id?: string & !=""
 	claudecode_auth0_client_secret?: string & !=""
+	// Derived from age.key + cluster_name at render time when absent, so it is
+	// stable across renders and distinct per cluster.
 	claudecode_oauth2_cookie_secret?: string & !=""
 	claudecode_allowed_emails?: string & !=""
 	talos_mcp_config?: string & !=""

@@ -89,6 +89,39 @@ spec:
               target:
                 group: helm.toolkit.fluxcd.io
                 kind: HelmRelease
+#|         The QUIC repair, when this cluster's egress blocks UDP 7844.
+
+           It goes HERE, inside the nested patches list, and not as another
+           entry in the outer `patches:` below — for the same reason the
+           suspend patches further down are scalar-only. A second outer patch
+           that set `spec.patches` would replace this whole nested list
+           wholesale, taking the generic HelmRelease strategy with it.
+
+           Rendered from cluster.yaml rather than pasted into the generated
+           file, so it survives the next `task configure`. Before the field
+           existed the fix lived in one person's clone and the next render
+           removed it without saying so. #|
+#% if (cloudflare_tunnel_transport | default('quic')) == 'http2' %#
+            # cloudflare_tunnel_transport: http2 — this site's egress blocks UDP 7844.
+            - patch: |-
+                apiVersion: helm.toolkit.fluxcd.io/v2
+                kind: HelmRelease
+                metadata:
+                  name: cloudflare-tunnel
+                spec:
+                  values:
+                    controllers:
+                      cloudflare-tunnel:
+                        containers:
+                          app:
+                            env:
+                              TUNNEL_POST_QUANTUM: false
+                              TUNNEL_TRANSPORT_PROTOCOL: http2
+              target:
+                group: helm.toolkit.fluxcd.io
+                kind: HelmRelease
+                name: cloudflare-tunnel
+#% endif %#
       target:
         group: kustomize.toolkit.fluxcd.io
         kind: Kustomization
@@ -146,6 +179,41 @@ spec:
           namespace: flux-system
         spec:
           suspend: true
+      target:
+        group: kustomize.toolkit.fluxcd.io
+        kind: Kustomization
+        name: #{ name }#
+#% endfor %#
+#|   The mirror of the loop above: things jg-base ships SUSPENDED, that this
+     cluster switches on.
+
+     Only one so far. longhorn-backup applies a RecurringJob that writes to
+     `longhorn_backup_target`; with no target it is not idle, it runs and fails
+     nightly, and on a cluster without Longhorn it applies against a CRD no
+     chart installs. So jg-base ships it off and the fact that this cluster
+     declares a target is what turns it on.
+
+     Why a suspend patch rather than jg-base selecting a directory with
+     `${LONGHORN_BACKUP}`, which is what the extras' backup Kustomizations do:
+     `cluster-apps` walks ./kubernetes/apps/base, so flux-local collects every
+     Kustomization under it, and flux-local substitutes nothing — a `${...}` in
+     a path is read literally and the whole suite dies at collection. Measured
+     on ferry133/jg-base#28. The extras pattern survives only because extras
+     are unreachable from apps/base and CI has never walked one. #|
+#% set _enabled = [] %#
+#% if longhorn_backup_target is defined and longhorn_backup_target %#
+#% set _ = _enabled.append(('longhorn-backup', 'longhorn_backup_target is set, so there is somewhere for the RecurringJob to write')) %#
+#% endif %#
+#% for name, why in _enabled %#
+    # un-suspended: #{ why }#
+    - patch: |-
+        apiVersion: kustomize.toolkit.fluxcd.io/v1
+        kind: Kustomization
+        metadata:
+          name: #{ name }#
+          namespace: flux-system
+        spec:
+          suspend: false
       target:
         group: kustomize.toolkit.fluxcd.io
         kind: Kustomization
@@ -214,7 +282,7 @@ spec:
 #% if deployment_profile == 'appliance' and not lan_shared_addr | default('') %#
 #| The shared address, on the other hand, is only free while it is un-pinned.
    Once `lan_shared_addr` is declared the annotation carries it, which is the
-   whole point of pinning (see docs/operations/router-dns.md) — the address is
+   whole point of pinning (see fleet-ops docs/operations/router-dns.md) — the address is
    then an external contract with the router and must not be reselected. #|
     # appliance, shared address not yet pinned: allocate it from the pool too
     - patch: |-
@@ -321,15 +389,21 @@ spec:
 
      claudecode/claude-code, monitoring/daily-check     2026-08-07
      storage/local-path-provisioner                     2026-08-11
+     default/echo                                       2026-08-23
 
    local-path is not the alternative to NFS — it is the node-local tier, and a
    cluster with a NAS still needs one (Postgres on NFS is wrong on fsync and
    lock semantics regardless of NAS size). So it is installed everywhere and
    never suspended, and `storage_backend` only decides which class is default.
 
+   echo now publishes two names off one pod — echo-ext.<domain> on
+   envoy-external and echo-int.<domain> on envoy-internal — so that a cluster
+   can say which of the two ingress paths is down without a second thing to
+   deploy. The old single name echo.<domain> is gone.
+
    storage/nfs-subdir is likewise a base app, but it IS conditional, so it is
    disabled by the suspend patch on cluster-apps-base above rather than here. #|
-#% set _now_base = ['claudecode/claude-code', 'monitoring/daily-check', 'storage/local-path-provisioner'] %#
+#% set _now_base = ['claudecode/claude-code', 'monitoring/daily-check', 'storage/local-path-provisioner', 'default/echo'] %#
 #% for extra in extras | default([]) if extra not in _now_base %#
 #% set _app = extra.split('/')[1] %#
 ---

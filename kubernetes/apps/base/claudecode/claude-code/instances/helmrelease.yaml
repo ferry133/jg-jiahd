@@ -65,9 +65,9 @@ spec:
               # claude-session in k8scc) -- reachable only via loopback since
               # this pod is hostNetwork.
               TALOS_MCP_URL: http://127.0.0.1:8765/sse
-              # OIDC mode: the oauth2-proxy sidecar is the only way in --
-              # ttyd binds loopback and requires the email header the proxy
-              # injects (value surfaces as TTYD_USER -> CLAUDE_USER_ID).
+              # OIDC mode (the default): the oauth2-proxy sidecar is the only
+              # way in -- ttyd binds loopback and requires the email header the
+              # proxy injects (value surfaces as TTYD_USER -> CLAUDE_USER_ID).
               # Explicit IP, not "lo": ttyd resolves an interface name to its
               # first non-127 address (Talos puts 169.254.x.x on lo).
               TTYD_INTERFACE: 127.0.0.1
@@ -175,7 +175,51 @@ spec:
               - --redirect-url=https://cc.${SECRET_DOMAIN}/oauth2/callback
               - --authenticated-emails-file=/etc/oauth2-proxy/allowed-emails
               - --skip-provider-button=true
-              - --reverse-proxy=true
+              # Off, deliberately, and not just left at the default -- someone
+              # will want to add it back. See #9.
+              #
+              # What --reverse-proxy=true does in v7.15.3, read from the source
+              # rather than from the flag's name:
+              #
+              #   - X-Forwarded-Proto/-Host/-Uri become trusted input. With no
+              #     --trusted-proxy-ip they are trusted from 0.0.0.0/0 + ::/0
+              #     (oauthproxy.go:404 logs a WARNING saying exactly that).
+              #   - the `client` field in every request log stops being the
+              #     connected peer and becomes whatever --real-client-ip-header
+              #     names -- X-Real-IP by default -- read straight off the
+              #     request with no trust check anywhere
+              #     (validation/options.go:83 installs the parser, ip/
+              #     realclientip.go:67 uses it). --trusted-proxy-ip does NOT
+              #     gate this; upstream's own warning at validation/
+              #     allowlist.go:22 says the same thing about X-Real-IP.
+              #
+              # This pod is hostNetwork, so :4180 listens on the node's LAN
+              # address. "Any source" is therefore every device on the
+              # customer's network, reaching oauth2-proxy without passing
+              # through envoy at all -- which is also why no trusted-proxy list
+              # could have fixed the log field.
+              #
+              # What is given up: the end-user's IP never appears in these logs
+              # again. It never reliably did (envoy sends X-Forwarded-For, not
+              # X-Real-IP), and the parties that actually see the client already
+              # record it -- Cloudflare for the tunnel, Auth0 for the login.
+              # What is gained: `client` means the peer that connected, always,
+              # and no header can move it.
+              #
+              # Nothing here depended on the trusted headers: --redirect-url is
+              # absolute, so getOAuthRedirectURI returns it before reading any
+              # header (oauthproxy.go:1115), and there are no --skip-auth-route
+              # patterns whose matching could be steered by X-Forwarded-Uri.
+              # X-Forwarded-Email still reaches ttyd -- that header comes from
+              # --pass-basic-auth / --pass-user-headers (both default true,
+              # options/legacy_options.go:215) and has never been tied to this
+              # flag.
+              #
+              # Re-enabling it means supplying --trusted-proxy-ip with this
+              # cluster's pod CIDR in the same edit, and accepting that the
+              # `client` field goes back to being forgeable regardless.
+              # scripts/check-forwarded-header-trust.py enforces the first half.
+              - --reverse-proxy=false
               - --cookie-secure=true
               - --cookie-expire=168h
             env:
@@ -374,9 +418,9 @@ spec:
               # claude-session in k8scc) -- reachable only via loopback since
               # this pod is hostNetwork.
               TALOS_MCP_URL: http://127.0.0.1:8765/sse
-              # OIDC mode: the oauth2-proxy sidecar is the only way in --
-              # ttyd binds loopback and requires the email header the proxy
-              # injects (value surfaces as TTYD_USER -> CLAUDE_USER_ID).
+              # OIDC mode (the default): the oauth2-proxy sidecar is the only
+              # way in -- ttyd binds loopback and requires the email header the
+              # proxy injects (value surfaces as TTYD_USER -> CLAUDE_USER_ID).
               # Explicit IP, not "lo": ttyd resolves an interface name to its
               # first non-127 address (Talos puts 169.254.x.x on lo).
               TTYD_INTERFACE: 127.0.0.1
@@ -484,7 +528,51 @@ spec:
               - --redirect-url=https://im.${SECRET_DOMAIN}/oauth2/callback
               - --authenticated-emails-file=/etc/oauth2-proxy/allowed-emails
               - --skip-provider-button=true
-              - --reverse-proxy=true
+              # Off, deliberately, and not just left at the default -- someone
+              # will want to add it back. See #9.
+              #
+              # What --reverse-proxy=true does in v7.15.3, read from the source
+              # rather than from the flag's name:
+              #
+              #   - X-Forwarded-Proto/-Host/-Uri become trusted input. With no
+              #     --trusted-proxy-ip they are trusted from 0.0.0.0/0 + ::/0
+              #     (oauthproxy.go:404 logs a WARNING saying exactly that).
+              #   - the `client` field in every request log stops being the
+              #     connected peer and becomes whatever --real-client-ip-header
+              #     names -- X-Real-IP by default -- read straight off the
+              #     request with no trust check anywhere
+              #     (validation/options.go:83 installs the parser, ip/
+              #     realclientip.go:67 uses it). --trusted-proxy-ip does NOT
+              #     gate this; upstream's own warning at validation/
+              #     allowlist.go:22 says the same thing about X-Real-IP.
+              #
+              # This pod is hostNetwork, so :4180 listens on the node's LAN
+              # address. "Any source" is therefore every device on the
+              # customer's network, reaching oauth2-proxy without passing
+              # through envoy at all -- which is also why no trusted-proxy list
+              # could have fixed the log field.
+              #
+              # What is given up: the end-user's IP never appears in these logs
+              # again. It never reliably did (envoy sends X-Forwarded-For, not
+              # X-Real-IP), and the parties that actually see the client already
+              # record it -- Cloudflare for the tunnel, Auth0 for the login.
+              # What is gained: `client` means the peer that connected, always,
+              # and no header can move it.
+              #
+              # Nothing here depended on the trusted headers: --redirect-url is
+              # absolute, so getOAuthRedirectURI returns it before reading any
+              # header (oauthproxy.go:1115), and there are no --skip-auth-route
+              # patterns whose matching could be steered by X-Forwarded-Uri.
+              # X-Forwarded-Email still reaches ttyd -- that header comes from
+              # --pass-basic-auth / --pass-user-headers (both default true,
+              # options/legacy_options.go:215) and has never been tied to this
+              # flag.
+              #
+              # Re-enabling it means supplying --trusted-proxy-ip with this
+              # cluster's pod CIDR in the same edit, and accepting that the
+              # `client` field goes back to being forgeable regardless.
+              # scripts/check-forwarded-header-trust.py enforces the first half.
+              - --reverse-proxy=false
               - --cookie-secure=true
               - --cookie-expire=168h
             env:

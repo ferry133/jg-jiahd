@@ -3,7 +3,7 @@
 # claude_instances in cluster.yaml -- jg-jiahd overrides it to "cc"
 # (cc.jiahd.cc). The shared manifests (namespace, SA/RBAC, OCIRepository,
 # secrets) come from jg-base kubernetes/apps/base/claudecode.
-#% for instance in claude_instances | default(['im']) %#
+#% for instance in claude_instances %#
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
@@ -62,6 +62,21 @@ spec:
               # but set here as well so it holds on any tag predating that and
               # regardless of what the image ships.
               LANG: C.UTF-8
+              # Registers the MCP memory server (explicit memory): k8scc's
+              # claude-session runs `claude mcp add memory` only when this is
+              # non-empty. Unconditional on purpose — the Secret key always
+              # exists (jg-base secret.yaml defaults it to ""), an empty value
+              # is exactly the no-database behavior, and a template conditional
+              # here would add one more place where "forgot to set" and "chose
+              # not to set" render identically (ferry133/jg-cluster-template#77:
+              # this env was simply missing, and explicit memory was
+              # zero-functional fleet-wide while the database it writes to was
+              # deployed, backed up, and empty).
+              DATABASE_URL:
+                valueFrom:
+                  secretKeyRef:
+                    name: claude-code-secret
+                    key: DATABASE_URL
 #% if talos_mcp_config is defined %#
               # Registers the talos-mcp sidecar as a remote MCP server (see
               # claude-session in k8scc) -- reachable only via loopback since
@@ -310,18 +325,39 @@ spec:
     configMaps:
       oauth2-emails:
         data:
-          # One email per line, rendered from claudecode_allowed_emails at
-          # template time -- deliberately NOT a Flux var: postBuild
-          # substitution collapses newlines in multi-line values.
+          # One email per line, rendered at template time -- deliberately NOT
+          # a Flux var: postBuild substitution collapses newlines in multi-line
+          # values.
+          #
+          # Indexed by instance, not the global field: this ConfigMap is inside
+          # the per-instance loop, and reading one global value here gave two
+          # instances byte-identical allowlists. plugin.py resolves the map for
+          # every instance (falling back to claudecode_allowed_emails) and fails
+          # the render on a name that is not an instance, so this subscript is
+          # total and a KeyError here would be a bug there.
           allowed-emails: |
-#% for email in claudecode_allowed_emails.split(',') %#
+#% for email in claudecode_allowed_emails_by_instance[instance].split(',') %#
             #{ email | trim }#
 #% endfor %#
 #% endif %#
     persistence:
+#| One PVC, two mounts, and they stay together: an OAuth token and the keyring
+   holding it have no reason to live on different volumes. Moving this PVC moves
+   both, which is why claudecode_config_storage_class is one knob and not two.
+
+   Its default is `default_storage_class` -- TODAY'S value, so merging this
+   moves nobody. That is deliberate and it is not what a "block tier by default"
+   reading would give: `storageClassName` is immutable, so a changed default
+   does not migrate anything, it renders a PVC the cluster cannot accept, on
+   every cluster at once, at whatever moment each next runs `task configure`.
+
+   The block tier IS the right destination -- gnome-keyring's file locking and
+   claude's small frequent writes lose the same argument against NFS that
+   databases do. But a cluster gets there by the copy procedure in
+   cluster.sample.yaml, one at a time, with the archive taken first. #|
       claude-config:
         type: persistentVolumeClaim
-        storageClass: #{ default_storage_class }#
+        storageClass: #{ claudecode_config_storage_class }#
         accessMode: ReadWriteOnce
         size: 5Gi
         globalMounts:
@@ -330,6 +366,13 @@ spec:
           # secret-service; without this mount they die with the pod.
           - path: /home/claude/.local/share/keyrings
             subPath: keyrings
+#| claudecode_workspace: false removes the PVC from the release. On the NFS
+   class the provisioner's archiveOnDelete renames the directory rather than
+   deleting it; on local-path and longhorn-static the reclaim policy is Delete
+   and nothing catches it. Hence the default is true and the sample says so in
+   words -- a cluster.yaml copied from another one should not be able to destroy
+   a workspace on the next `task configure` without having said so. #|
+#% if claudecode_workspace %#
       claude-workspace:
         type: persistentVolumeClaim
         storageClass: #{ default_storage_class }#
@@ -337,10 +380,20 @@ spec:
         size: 20Gi
         globalMounts:
           - path: /home/claude/workspace
-#| The shared coding directory is an NFS export or it is nothing: with no NAS
-   there is nothing to share, and rendering the mount anyway produced empty
-   server/path values that the chart's schema rejects outright — the whole
-   release fails to install, not just this volume. #|
+#% endif %#
+#| ⚠️ 宣告的本地例外（jg-jiahd，2026-09-05 同步時重新移植；jcom 有同名例外）。上游已於
+   `c8f9357`（jgct#31）移除這個掛載。這裡保留，因為同步的目的是拿到
+   claudecode_config_storage_class，而不是改變終端看得到什麼：實測 `/home/claude/coding`
+   掛著 `nas_coding_path`，內容 2 個項目（`#recycle`、`cc-summary`）。要不要拿掉
+   **是 ferry133 的決定，不該由一次模板同步夾帶**——決定拿掉時整段刪除即可，
+   NAS 上的檔案不受影響（type: nfs，不是 PVC）。
+
+   在那之前，每次同步這個檔都要重新移植這一段；它與上游其餘部分無關，可整段搬。
+   NAS_CODING_PATH 仍由 cluster-secrets.sops.yaml.j2 渲染（上游保留了該變數）。
+
+   上游原本的理由（保留）：The shared coding directory is an NFS export or it is
+   nothing — with no NAS there is nothing to share, and rendering the mount anyway
+   produced empty server/path values that the chart's schema rejects outright. #|
 #% if nas_coding_path is defined and nas_coding_path %#
       coding:
         type: nfs

@@ -10,11 +10,26 @@ that scales it up removes it.
 
 Two modes, so two checks:
 
-  Auth0 (the default)   auth0.json must supply the shared application's domain,
-                        client_id and client_secret. Absent, the render dies
-                        partway through with a traceback; empty, it deploys an
-                        oauth2-proxy that cannot start — and OIDC mode gives
-                        ttyd no fallback, so that is a terminal nobody reaches.
+  Auth0 (the default)   cluster.yaml must carry THIS cluster's own tenant —
+                        domain, client_id, client_secret and allowed_emails.
+                        Absent, the render dies partway through with a
+                        traceback; empty, it deploys an oauth2-proxy that
+                        cannot start — and OIDC mode gives ttyd no fallback, so
+                        that is a terminal nobody reaches.
+
+                        Until `#64` this said "the shared application's", and
+                        told operators to copy auth0.json from another cluster.
+                        The 2026-08-25 ruling gives every cluster its own
+                        tenant; a cluster that deliberately shares one says so
+                        with `claudecode_auth0_shared: true`. This check runs
+                        SECOND in `:configure:` and the render is tenth, so
+                        whatever this file says is what an operator acts on —
+                        the message in plugin.py is never reached.
+
+                        An operator-declared cookie secret is checked here too.
+                        It is optional and derived correctly when absent, so the
+                        only way to get it wrong is to write one — which one
+                        cluster did, and paid the full price for (#17).
 
   claudecode_auth0:     ttyd basic auth is the whole gate, so the credential
   false                 must exist and must not be guessable. Before this
@@ -33,6 +48,8 @@ Exit 0 if acceptable, 1 otherwise.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import re
 import subprocess
@@ -79,10 +96,22 @@ def auth0_enabled(path: Path) -> bool:
 
 
 def check_auth0(config: Path) -> list[str]:
-    """Whatever cluster.yaml does not override has to come from auth0.json.
+    """cluster.yaml must carry this cluster's own tenant; auth0.json is opt-in.
 
-    allowed_emails counts among those: OIDC mode renders the allowlist into a
-    ConfigMap, and an absent one fails the render rather than defaulting open.
+    allowed_emails counts among the required values: OIDC mode renders the
+    allowlist into a ConfigMap, and an absent one fails the render rather than
+    defaulting open.
+
+    This docstring said the opposite until 2026-09-03 — "whatever cluster.yaml
+    does not override has to come from auth0.json" — sitting directly above the
+    function that now implements the reverse. It survived the `#64` sweep
+    because that sweep grepped for the words the other copies used (`shared`,
+    `same application`, `copy … another cluster`) and this one uses none of
+    them. **"I grepped" and "I grepped for the right words" read identically.**
+    Found by the acceptance reviewer; two more (cluster.sample.yaml's
+    "Overrides, rarely needed" and "Defaults to the operators listed in
+    auth0.json") were then found by listing every mention of the filename and
+    reading them, instead of searching for remembered phrasing.
     """
     from_config = {
         field: yq(f'.claudecode_auth0_{field} // ""', config)
@@ -92,13 +121,34 @@ def check_auth0(config: Path) -> list[str]:
     if all(from_config.values()) and emails:
         return []
 
+    # Reading auth0.json is opt-in since `#64`. Without the flag, a missing
+    # field is an error rather than something inherited from whichever cluster
+    # directory the file was copied out of — "forgot to set it" and
+    # "deliberately shares a tenant" used to produce identical output, and the
+    # identical output was the shared one.
+    shared = yq('.claudecode_auth0_shared // ""', config) in ("true", "True")
+    if not shared:
+        absent = [f for f in AUTH0_FIELDS if not from_config[f]]
+        if not emails:
+            absent.append("allowed_emails")
+        return [
+            "cluster.yaml is missing this cluster's own Auth0 values: "
+            + ", ".join(absent),
+            "since 2026-08-25 every cluster gets its OWN Auth0 tenant — do NOT "
+            "copy auth0.json out of another cluster directory, which is what "
+            "this message used to tell you to do",
+            "read them from this cluster's tenant into cluster.yaml, or set "
+            "`claudecode_auth0_shared: true` if it deliberately shares another "
+            "cluster's application",
+            "or set `claudecode_auth0: false` in cluster.yaml for ttyd basic auth",
+        ]
+
     auth0 = config.parent / "auth0.json"
     if not auth0.is_file():
         return [
-            "auth0.json not found — claude-code defaults to Auth0 login",
-            "copy it from another cluster directory (it is the same shared "
-            "Auth0 application everywhere, and gitignored in all of them)",
-            "or set `claudecode_auth0: false` in cluster.yaml for ttyd basic auth",
+            "claudecode_auth0_shared is set but auth0.json is not in this "
+            "directory — that flag is what makes reading it legitimate, and "
+            "there is nothing to read",
         ]
     try:
         data = json.loads(auth0.read_text())
@@ -148,6 +198,88 @@ def credential_problems(credential: str) -> list[str]:
     return found
 
 
+# oauth2-proxy's cookie secret becomes an AES key, so it must end up 16, 24 or
+# 32 bytes. Two things get conflated in its error message and the difference is
+# the whole defect: it reports the *length* it ended up with, never the reason
+# it ended up with that length.
+#
+# The rule below is transcribed from two measured cases plus that error text,
+# not from reading oauth2-proxy's source:
+#
+#   jg-jiahd       44 chars, URL-safe alphabet   → decodes to 32B → accepted,
+#                                                  4d11h / 0 restarts
+#   jg-janncotcc   44 chars, STANDARD alphabet   → does not decode → falls back
+#                                                  to the raw 44 → refused, 23×
+#                                                  CrashLoopBackOff
+#
+# Same image, same length, opposite outcomes. So length is not the thing to
+# check; "does it decode, and to what" is.
+#
+# The fallback branch is kept deliberately permissive: a value that is not
+# base64 at all but is itself exactly 16/24/32 bytes is what oauth2-proxy's own
+# error text implies it would accept, so this does not reject it. Being
+# narrower than the thing you are guarding turns a good value into a failed
+# render, and that failure looks identical to a real one.
+COOKIE_SECRET_BYTES = (16, 24, 32)
+
+
+def cookie_secret_problems(secret: str) -> list[str]:
+    """Never prints the value — only what is wrong with it. See module docstring."""
+    padded = secret + "=" * (-len(secret) % 4)
+    try:
+        decoded = base64.urlsafe_b64decode(padded)
+    except (binascii.Error, ValueError):
+        decoded = None
+    else:
+        # Python's decoder ignores what it cannot use rather than refusing, so a
+        # standard-alphabet value can "decode" to the wrong number of bytes
+        # instead of raising. Re-encoding is the discriminating test: only a
+        # genuinely URL-safe value round-trips.
+        if base64.urlsafe_b64encode(decoded).decode().rstrip("=") != padded.rstrip("="):
+            decoded = None
+
+    if decoded is not None:
+        if len(decoded) in COOKIE_SECRET_BYTES:
+            return []
+        return [
+            f"decodes to {len(decoded)} bytes; oauth2-proxy needs "
+            f"{', '.join(map(str, COOKIE_SECRET_BYTES))}",
+        ]
+
+    if len(secret.encode("utf-8")) in COOKIE_SECRET_BYTES:
+        return []
+
+    problems = [
+        f"is {len(secret)} characters and is not URL-safe base64, so "
+        f"oauth2-proxy will measure it raw and refuse it",
+    ]
+    if set("+/") & set(secret):
+        problems.append(
+            "it contains '+' or '/' — that is STANDARD base64, and oauth2-proxy "
+            "only decodes the URL-safe alphabet ('-' and '_')",
+        )
+    return problems
+
+
+def check_cookie_secret(config: Path) -> list[str]:
+    """Only reachable in Auth0 mode; unset is the good case, not a gap.
+
+    plugin.py derives it from age.key + cluster_name when absent, and that
+    derivation has always emitted URL-safe base64. So this checks the one input
+    a human can supply, and says nothing when nobody supplied one.
+    """
+    secret = yq('.claudecode_oauth2_cookie_secret // ""', config)
+    if not secret:
+        return []
+    problems = cookie_secret_problems(secret)
+    if not problems:
+        return []
+    return [f"claudecode_oauth2_cookie_secret {p}" for p in problems] + [
+        "remove the line from cluster.yaml to fall back to the derived value — "
+        "but note that changes the secret, which signs out every open session",
+    ]
+
+
 def check_basic_auth(config: Path) -> list[str]:
     credential = yq('.ttyd_credential // ""', config)
     if not credential:
@@ -166,7 +298,11 @@ def main() -> int:
 
     auth0 = auth0_enabled(config)
     if auth0:
-        label, problems = "claudecode auth (Auth0)", check_auth0(config)
+        label = "claudecode auth (Auth0)"
+        # Both, not the first that fails: a cluster with a broken auth0.json and
+        # a broken cookie secret should learn about both in one run rather than
+        # discover the second only after fixing the first.
+        problems = check_auth0(config) + check_cookie_secret(config)
         remedy = []
     else:
         label, problems = "claudecode auth (ttyd basic)", check_basic_auth(config)

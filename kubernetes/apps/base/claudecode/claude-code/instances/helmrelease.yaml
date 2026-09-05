@@ -61,6 +61,21 @@ spec:
               # but set here as well so it holds on any tag predating that and
               # regardless of what the image ships.
               LANG: C.UTF-8
+              # Registers the MCP memory server (explicit memory): k8scc's
+              # claude-session runs `claude mcp add memory` only when this is
+              # non-empty. Unconditional on purpose — the Secret key always
+              # exists (jg-base secret.yaml defaults it to ""), an empty value
+              # is exactly the no-database behavior, and a template conditional
+              # here would add one more place where "forgot to set" and "chose
+              # not to set" render identically (ferry133/jg-cluster-template#77:
+              # this env was simply missing, and explicit memory was
+              # zero-functional fleet-wide while the database it writes to was
+              # deployed, backed up, and empty).
+              DATABASE_URL:
+                valueFrom:
+                  secretKeyRef:
+                    name: claude-code-secret
+                    key: DATABASE_URL
               # Registers the talos-mcp sidecar as a remote MCP server (see
               # claude-session in k8scc) -- reachable only via loopback since
               # this pod is hostNetwork.
@@ -268,9 +283,16 @@ spec:
     configMaps:
       oauth2-emails:
         data:
-          # One email per line, rendered from claudecode_allowed_emails at
-          # template time -- deliberately NOT a Flux var: postBuild
-          # substitution collapses newlines in multi-line values.
+          # One email per line, rendered at template time -- deliberately NOT
+          # a Flux var: postBuild substitution collapses newlines in multi-line
+          # values.
+          #
+          # Indexed by instance, not the global field: this ConfigMap is inside
+          # the per-instance loop, and reading one global value here gave two
+          # instances byte-identical allowlists. plugin.py resolves the map for
+          # every instance (falling back to claudecode_allowed_emails) and fails
+          # the render on a name that is not an instance, so this subscript is
+          # total and a KeyError here would be a bug there.
           allowed-emails: |
             jiahdadm@gmail.com
             ferry133@gmail.com
@@ -414,6 +436,21 @@ spec:
               # but set here as well so it holds on any tag predating that and
               # regardless of what the image ships.
               LANG: C.UTF-8
+              # Registers the MCP memory server (explicit memory): k8scc's
+              # claude-session runs `claude mcp add memory` only when this is
+              # non-empty. Unconditional on purpose — the Secret key always
+              # exists (jg-base secret.yaml defaults it to ""), an empty value
+              # is exactly the no-database behavior, and a template conditional
+              # here would add one more place where "forgot to set" and "chose
+              # not to set" render identically (ferry133/jg-cluster-template#77:
+              # this env was simply missing, and explicit memory was
+              # zero-functional fleet-wide while the database it writes to was
+              # deployed, backed up, and empty).
+              DATABASE_URL:
+                valueFrom:
+                  secretKeyRef:
+                    name: claude-code-secret
+                    key: DATABASE_URL
               # Registers the talos-mcp sidecar as a remote MCP server (see
               # claude-session in k8scc) -- reachable only via loopback since
               # this pod is hostNetwork.
@@ -621,9 +658,16 @@ spec:
     configMaps:
       oauth2-emails:
         data:
-          # One email per line, rendered from claudecode_allowed_emails at
-          # template time -- deliberately NOT a Flux var: postBuild
-          # substitution collapses newlines in multi-line values.
+          # One email per line, rendered at template time -- deliberately NOT
+          # a Flux var: postBuild substitution collapses newlines in multi-line
+          # values.
+          #
+          # Indexed by instance, not the global field: this ConfigMap is inside
+          # the per-instance loop, and reading one global value here gave two
+          # instances byte-identical allowlists. plugin.py resolves the map for
+          # every instance (falling back to claudecode_allowed_emails) and fails
+          # the render on a name that is not an instance, so this subscript is
+          # total and a KeyError here would be a bug there.
           allowed-emails: |
             jiahdadm@gmail.com
             ferry133@gmail.com

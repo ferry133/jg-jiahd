@@ -299,7 +299,7 @@ spec:
     persistence:
       claude-config:
         type: persistentVolumeClaim
-        storageClass: sc-nas
+        storageClass: longhorn
         accessMode: ReadWriteOnce
         size: 5Gi
         globalMounts:

@@ -146,6 +146,20 @@ spec:
         group: kustomize.toolkit.fluxcd.io
         kind: Kustomization
         name: longhorn-backup
+    # enabled: the default im.<domain> web terminal from jg-base, gated on this cluster accepting the Auth0 OIDC front
+    - patch: |-
+        apiVersion: kustomize.toolkit.fluxcd.io/v1
+        kind: Kustomization
+        metadata:
+          name: claude-code-im
+          namespace: flux-system
+        spec:
+          suspend: false
+          path: ./kubernetes/apps/base/claudecode/claude-code/im/enabled
+      target:
+        group: kustomize.toolkit.fluxcd.io
+        kind: Kustomization
+        name: claude-code-im
 ---
 # ── claude-code instances (base; per-cluster rendered from claude_instances) ──
 # The shared pieces (namespace, SA/RBAC, OCIRepository, secrets) come from

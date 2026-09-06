@@ -1,8 +1,12 @@
-# claude-code is a base app: every cluster gets one instance. "im" is the
-# default name (im.${SECRET_DOMAIN}); rename it or add more via
-# claude_instances in cluster.yaml -- jg-jiahd overrides it to "cc"
-# (cc.jiahd.cc). The shared manifests (namespace, SA/RBAC, OCIRepository,
-# secrets) come from jg-base kubernetes/apps/base/claudecode.
+# claude-code EXTRA instances only, since 2026-09-06: the default `im`
+# HelmRelease is static and lives in jg-base
+# (kubernetes/apps/base/claudecode/claude-code/im/), switched on by the
+# claude-code-im patch in flux/cluster/ks.yaml.j2. Declaring "im" here is a
+# render error (plugin.py) -- it would fight the base object over its name.
+# Use claude_instances for renamed/additional terminals (jg-jiahd's "cc") and
+# for the basic-auth instance a claudecode_auth0:false cluster needs. The
+# shared manifests (namespace, SA/RBAC, OCIRepository, secrets) come from
+# jg-base kubernetes/apps/base/claudecode.
 #% for instance in claude_instances %#
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
@@ -44,7 +48,7 @@ spec:
           app:
             image:
               repository: ghcr.io/ferry133/claude-code
-              tag: 8228f58
+              tag: 9418571
             env:
               # The pod runs as uid 0 (see defaultPodOptions), which would
               # resolve HOME=/root -- but all state (claude config PVC,
@@ -160,7 +164,7 @@ spec:
             # jg-base for the full design.
             image:
               repository: ghcr.io/ferry133/claude-code
-              tag: 8228f58
+              tag: 9418571
             command: ["python3", "/usr/local/bin/talos_mcp_server.py"]
             env:
               TALOSCONFIG: /etc/talos-mcp/talosconfig
@@ -345,16 +349,16 @@ spec:
    holding it have no reason to live on different volumes. Moving this PVC moves
    both, which is why claudecode_config_storage_class is one knob and not two.
 
-   Its default is `default_storage_class` -- TODAY'S value, so merging this
-   moves nobody. That is deliberate and it is not what a "block tier by default"
-   reading would give: `storageClassName` is immutable, so a changed default
-   does not migrate anything, it renders a PVC the cluster cannot accept, on
-   every cluster at once, at whatever moment each next runs `task configure`.
+   Its default is `db_storage_class` -- the block tier (#76, 2026-09-05
+   ruling: claude's memory never lives on NFS). gnome-keyring's file locking
+   and claude's small frequent writes lose the same argument against NFS that
+   databases do.
 
-   The block tier IS the right destination -- gnome-keyring's file locking and
-   claude's small frequent writes lose the same argument against NFS that
-   databases do. But a cluster gets there by the copy procedure in
-   cluster.sample.yaml, one at a time, with the archive taken first. #|
+   Safe only because every pre-ruling cluster migrated first (by the copy
+   procedure in cluster.sample.yaml, archive taken first) and wrote its class
+   into cluster.yaml: `storageClassName` is immutable, so a changed default
+   migrates nothing -- on an unmigrated cluster it renders a PVC the cluster
+   cannot accept, which is why #76 waited for the migration issues to close. #|
       claude-config:
         type: persistentVolumeClaim
         storageClass: #{ claudecode_config_storage_class }#
@@ -380,27 +384,6 @@ spec:
         size: 20Gi
         globalMounts:
           - path: /home/claude/workspace
-#% endif %#
-#| ⚠️ 宣告的本地例外（jg-jiahd，2026-09-05 同步時重新移植；jcom 有同名例外）。上游已於
-   `c8f9357`（jgct#31）移除這個掛載。這裡保留，因為同步的目的是拿到
-   claudecode_config_storage_class，而不是改變終端看得到什麼：實測 `/home/claude/coding`
-   掛著 `nas_coding_path`，內容 2 個項目（`#recycle`、`cc-summary`）。要不要拿掉
-   **是 ferry133 的決定，不該由一次模板同步夾帶**——決定拿掉時整段刪除即可，
-   NAS 上的檔案不受影響（type: nfs，不是 PVC）。
-
-   在那之前，每次同步這個檔都要重新移植這一段；它與上游其餘部分無關，可整段搬。
-   NAS_CODING_PATH 仍由 cluster-secrets.sops.yaml.j2 渲染（上游保留了該變數）。
-
-   上游原本的理由（保留）：The shared coding directory is an NFS export or it is
-   nothing — with no NAS there is nothing to share, and rendering the mount anyway
-   produced empty server/path values that the chart's schema rejects outright. #|
-#% if nas_coding_path is defined and nas_coding_path %#
-      coding:
-        type: nfs
-        server: "${NAS_SERVER}"
-        path: "${NAS_CODING_PATH}"
-        globalMounts:
-          - path: /home/claude/coding
 #% endif %#
 #% if claudecode_auth0_enabled %#
       oauth2-emails:

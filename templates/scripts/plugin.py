@@ -301,7 +301,14 @@ class Plugin(makejinja.plugin.Plugin):
         # key this cluster does not hold. Both are refused here -- the one place
         # that sees the key and the date together. The messages name fields,
         # never values: these fields sit next to credentials.
-        for key_field in ('talos_mcp_sa_key', 'factory_omni_sa_key'):
+        # factory_github_token joined them for ferry133/jg-base#99: same
+        # shape, worse timing. An expired Omni key breaks a diagnostic tool;
+        # an expired PAT breaks provisioning halfway through creating a
+        # customer's repo. It is also the weakest of the three to revoke —
+        # a fine-grained PAT has no key id — which is why daily-check row 25
+        # says that in its own output.
+        for key_field in ('talos_mcp_sa_key', 'factory_omni_sa_key',
+                          'factory_github_token'):
             exp_field = f'{key_field}_expires'
             exp = data.get(exp_field)
             # makejinja loads cluster.yaml with yaml.safe_load_all, which reads
@@ -486,6 +493,21 @@ class Plugin(makejinja.plugin.Plugin):
         # provisioner's archiveOnDelete catches it, on local-path and
         # longhorn-static nothing does.
         data.setdefault('claudecode_workspace', True)
+        # Where the workspace PVC lands. Defaults to default_storage_class —
+        # what the template rendered verbatim before this field existed, so a
+        # cluster that does not name it renders byte-identically (#191).
+        #
+        # A separate knob from the default because the default is not safe to
+        # FOLLOW: storageClassName is immutable on a bound claim, so flipping
+        # storage_backend under an existing workspace PVC wedges the helm
+        # upgrade (`spec is immutable after creation`) and the HelmRelease
+        # stops converging. Measured on the bench 2026-09-22, #191.
+        #
+        # Must sit AFTER the default_storage_class setdefault above — it reads
+        # the resolved value. Same ordering constraint, same reason, as
+        # claudecode_config_storage_class reading db_storage_class below.
+        data.setdefault('claudecode_workspace_storage_class',
+                        data['default_storage_class'])
         # The block tier, for anything that needs fsync durability and file
         # locking. Not derived from storage_backend: NFS is never a valid answer
         # here, whatever the cluster uses for bulk data. An existing cluster

@@ -353,6 +353,39 @@ import (
 			cluster_dns_gateway_addr: net.IPv4 & !=cluster_api_addr
 			cloudflare_gateway_addr:  net.IPv4 & !=cluster_api_addr
 		}
+		// Why these three must differ, and what would have to change to relax
+		// it — jgct#188 (2), asked by the person who hit it while turning a
+		// one-box appliance into two nodes.
+		//
+		// **They are not "one address per service".** `envoy-internal`,
+		// `k8s-gateway` and `mqtt` already share ONE address through Cilium's
+		// `lbipam.cilium.io/sharing-key` — their ports do not overlap, and
+		// `lan_shared_addr` is `Opt-in` on every profile, not just appliance.
+		// `check-lb-pool-render.py` has carried a `deployment_profile: "full"`
+		// case for exactly that since before this comment existed. So the
+		// sharing mechanism is not something `full` lacks.
+		//
+		// What `full` cannot share is `envoy-external`: it listens on the same
+		// 80/443 as `envoy-internal`, so Cilium refuses to put them on one
+		// address (jg-base's lan-address/README states the rule; the ports are
+		// the reason, and they are a property of the workloads).
+		//
+		// **So the honest status of these three `!=` clauses is: nobody has
+		// measured whether collapsing the two internal ones is accepted, and
+		// until someone does, distinct is what the schema can defend.** That
+		// is a weaker claim than "forbidden", and writing the weaker one is the
+		// point — the next person to ask deserves the reason rather than the
+		// silence this block used to offer.
+		//
+		// ⚠️ One measurement landed while this was being written and it makes
+		// the relaxation harder, not easier (`[5fe39a]`, jg-jiahd, Cilium
+		// v1.19.1, 2026-09-24): an address L2-announced by ANOTHER node reads
+		// **TAKEN** to `arping -D`, the same probe `lan-address-probe` uses.
+		// Controls were complete — router TAKEN, two sibling nodes TAKEN (so
+		// the instrument sees across nodes), the observer's own address FREE,
+		// unused addresses FREE. Anything that hands these addresses to
+		// discovery has to survive that, and jgct#190 is where that is being
+		// worked out.
 		cluster_gateway_addr:     net.IPv4 & !=cluster_dns_gateway_addr & !=cloudflare_gateway_addr
 		cluster_dns_gateway_addr: net.IPv4 & !=cluster_gateway_addr & !=cloudflare_gateway_addr
 		cloudflare_gateway_addr:  net.IPv4 & !=cluster_gateway_addr & !=cluster_dns_gateway_addr
@@ -610,6 +643,16 @@ import (
 	// constraint here cannot print anything sensitive. plugin.py refuses a key
 	// without a date, and a date without a key.
 	talos_mcp_sa_key_expires?: =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+	// The same sidecar's OPTIONAL second credential (jg-base
+	// im-onsite-operator-tools): a direct-LAN talosconfig with role ceiling
+	// os:operator, minted ONCE per cluster by fleet-ops's
+	// `talos-operator-credential mint` (an Omni break-glass) and written here
+	// file-to-file -- never typed by hand. Unlike talos_mcp_config it carries
+	// its own client cert AND key, so it IS a credential. No constraint beyond
+	// non-empty: cue vet echoes the value it rejects, and this value holds a
+	// private key. No *_expires twin: the expiry is in the certificate, and
+	// both the sidecar and the skill's `verify` read it from there.
+	talos_operator_config?: string & !=""
 	// factory provisioning credentials (extras/factory/factory in jg-base).
 	// Only the cluster that hosts factory sets these -- jcom today. Every one is
 	// optional and renders empty elsewhere, which is what the consuming Secret

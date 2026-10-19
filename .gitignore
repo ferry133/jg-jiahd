@@ -16,6 +16,11 @@ age*.txt
 github-deploy.key
 github-deploy.key.pub
 github-push-token.txt
+# Any `<name>.deploy.key` — jg-extras.deploy.key (jgct#217 / #227) at the repo root,
+# and whatever deploy key comes next. The name pattern, not the one file:
+# rules naming one file are what jgct#184 had to undo. Copied by hand from the
+# template's .gitignore (a tracked file is copied once at creation, never re-rendered).
+*.deploy.key*
 
 # Service credentials handed out by third parties
 cloudflare-tunnel.json

@@ -13,6 +13,12 @@
 
 完整 checklist 見 `jg-cluster-template/CLAUDE.md`。
 
+> ⚠️ **2026-10-23：`cluster-secrets` 裡有 4 個鍵沒有渲染來源**——`LINEBOT_AUTH0_DOMAIN`／`_CLIENT_ID`／`_CLIENT_SECRET`、
+> `LINEBOT_ADMIN_SESSION_SECRET`（`06c4d36` 用 `sops set` 直接寫進密文，跳過上面第 2 步）。**每次 `task configure` 都會把它們刪掉**，
+> push 之後 linebot 的 Auth0 登入就斷。修好之前（`ferry133/jg-cluster-template#232`）：configure 後先比對解密後的鍵名，
+> 若 cluster-secrets 唯一的差異是少這 4 個鍵，就 `git checkout HEAD -- kubernetes/components/sops/cluster-secrets.sops.yaml`。
+> ⛔ 第 1 步的 extras manifest 自 split-extras 起住在 **`ferry133/jg-extras`**，不再是 jg-base。
+
 ---
 
 ## kubectl Access

@@ -731,6 +731,21 @@ import (
 		anthropic_api_key: string & !=""
 	}
 	database_url?: string
+	// linebot-admin's Auth0 login and session cookie (ferry133/linebot#50,
+	// jg-base#189). Required, not optional, when the cluster runs
+	// default/linebot: before jgct#232 these existed only as hand-written
+	// ciphertext in jg-jiahd, and every `task configure` deleted them
+	// silently. A refusal here is the loud version of that deletion.
+	linebot_auth0_domain?: string
+	linebot_auth0_client_id?: string
+	linebot_auth0_client_secret?: string
+	linebot_admin_session_secret?: string
+	if list.Contains(extras, "default/linebot") {
+		linebot_auth0_domain: string & !=""
+		linebot_auth0_client_id: string & !=""
+		linebot_auth0_client_secret: string & !=""
+		linebot_admin_session_secret: string & !=""
+	}
 	synophoto_auth0_domain?: string
 	synophoto_auth0_client_id?: string
 	synophoto_auth0_client_secret?: string

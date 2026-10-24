@@ -8,6 +8,7 @@
 #   §1 Base — required for this profile (network, cloudflare API, repo)
 #   §2 Extras — only required when listed in `extras:`. Each subsection
 #               states which extras it's needed for.
+#   §3 App repos — optional; apps that live in their own repos (tenants)
 #
 # Fields marked (appliance: n/a) are rejected by validation under that profile —
 # they configure things an appliance either discovers at runtime or does not run.
@@ -717,6 +718,28 @@ cluster_name: "xxxxxx"
 #                                 # with talos_mcp_sa_key -- the render refuses one
 #                                 # without the other. jg-base daily-check warns 30
 #                                 # days before it (row 24, fleet-ops#11)
+#
+# Optional SECOND credential for the same sidecar: an os:operator talosconfig
+# that reaches the nodes DIRECTLY on the LAN (jg-base im-onsite-operator-tools).
+# With it the agent can still read a node whose SideroLink to Omni is down, and
+# can graceful-reboot a node of THIS cluster -- after the person at the
+# terminal confirms, every time. Without it the sidecar stays read-only,
+# exactly as above. Nothing else changes either way.
+#
+# ⚠️ Do NOT paste a value here by hand, and do not run omnictl for it yourself.
+# It is minted by the operator company's skill (fleet-ops
+# `talos-operator-credential mint`), which writes the value into this file
+# directly, prints only the roles / endpoints / expiry, and refuses to mint a
+# second one while the current one is still valid. What you should know about
+# the one it mints: it is an Omni "break-glass" credential, so Omni marks this
+# cluster `tainted-by-break-glass` (expected on every delivered cluster, not a
+# fault); it is valid for ONE YEAR and the sidecar warns 30 days out; and Omni
+# cannot revoke it -- the only revocation is a Talos CA rotation, which the
+# same skill performs (`rotate`) before minting the replacement.
+# talos_operator_config: |
+#   context: ...
+#   contexts:
+#     ...
 
 
 # ── extras/factory/factory — provisioning credentials (one cluster only) ──────
@@ -819,7 +842,8 @@ cluster_name: "xxxxxx"
 #   default/homebridge           → (no extra params)
 #   default/linebot              → anthropic_api_key, database_url,
 #                                  line_channel_access_token, line_channel_secret, line_notify_group_id,
-#                                  trello_api_key, trello_api_token
+#                                  trello_api_key, trello_api_token,
+#                                  linebot_auth0_* (3), linebot_admin_session_secret (all four required)
 #   default/mariadb              → mariadb_lb_ip
 #   default/mqtt                 → mqtt_lb_ip
 #   default/postgres             → postgres_password
@@ -838,6 +862,23 @@ cluster_name: "xxxxxx"
 # extras:
 #   - default/trello-notifier
 #   - default/mqtt
+
+# ── Where the extras come from ────────────────────────────────────────────────
+# The extras above live in their own private repo, ferry133/jg-extras (they used
+# to be part of jg-base). Leave these three out unless you have been told to
+# pin a release or use a fork; the defaults are the fleet's.
+# extras_repo_url: "ssh://git@github.com/ferry133/jg-extras.git"
+# extras_repo_ref: "main"
+# extras_repo_ref_kind: "branch"   # branch | tag | semver | commit
+#
+# ⚠️ A cluster with ANY extra needs a read-only deploy key for that repo in this
+# directory, or `task configure` stops and says so:
+#   ssh-keygen -t ed25519 -N '' -C '<cluster>-jg-extras' -f jg-extras.deploy.key
+#   then register jg-extras.deploy.key.pub on ferry133/jg-extras as a
+#   READ-ONLY deploy key titled with this cluster's name.
+# The private half is git-ignored (*.deploy.key*) and must reach escrow: run
+# `escrow-refresh` after creating it. One key per cluster, so one cluster can
+# be cut off without touching the others. A cluster with no extras needs none.
 
 # ── network/cloudflare-tunnel-lan ─────────────────────────────────────────────
 # cloudflare_lan_tunnel_token: ""     # `cloudflared tunnel token <name>` output
@@ -879,6 +920,18 @@ cluster_name: "xxxxxx"
 # line_notify_group_id: ""            # shared with trello-notifier if both enabled
 # trello_api_key: ""                  # shared with trello-notifier if both enabled
 # trello_api_token: ""                # shared with trello-notifier if both enabled
+#
+# linebot-admin login (Auth0) and its session cookie. All four are REQUIRED when
+# extras includes default/linebot — `cue vet` refuses an empty one, because an
+# admin page without them has no login.
+# Auth0: a Regular Web App at manage.auth0.com
+#   Allowed Callback URLs: https://linebot-admin.<cloudflare_domain>/callback
+#   Allowed Logout URLs:   https://linebot-admin.<cloudflare_domain>/   (trailing slash: the app
+#                          returns to url_for("index"), linebot agents/admin_server.py)
+# linebot_auth0_domain: ""            # e.g. "your-tenant.us.auth0.com"
+# linebot_auth0_client_id: ""
+# linebot_auth0_client_secret: ""
+# linebot_admin_session_secret: ""    # python3 -c "import secrets; print(secrets.token_hex(32))"
 
 # ── default/synophoto ─────────────────────────────────────────────────────────
 # Auth0: create a Regular Web App at manage.auth0.com
@@ -912,3 +965,86 @@ cluster_name: "xxxxxx"
 #   -----BEGIN PGP PRIVATE KEY BLOCK-----
 #   ...
 #   -----END PGP PRIVATE KEY BLOCK-----
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# §3. APP REPOS — apps that live in their own private repo (tenants)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Leave this out unless the cluster runs an app that is NOT in jg-base: one a
+# vendor writes, or one the cluster's own `im` agent writes. Each entry is a
+# tenant: its own private GitHub repo, reconciled by Flux into its own
+# namespaces, as its own ServiceAccount, decrypting with its own age key. It
+# can read nothing else on the cluster and cannot widen its own rights.
+#
+# Absent or `app_repos: []` renders exactly what a cluster without tenants
+# renders — nothing changes until an entry is added.
+#
+# ⚠️ Before the first entry, all of these must hold:
+#   - jg-base ships the ClusterRole `tenant-admin`. Without it the tenant's
+#     RoleBindings grant nothing and its Kustomization fails (closed, not open).
+#     Check: `kubectl get clusterrole tenant-admin`.
+#   - The entry is created by fleet-ops' `tenant-repo-provision` skill, not
+#     by hand. It creates the repo, writes the keys below, registers the
+#     deploy key, adds the entry and runs `task configure`; THEN run
+#     `escrow-refresh` yourself — the skill tells you to, it does not do it,
+#     and until you do the tenant keys are not in escrow.
+#   - The keys exist in this directory under `tenants/`, which is git-ignored
+#     and travels in the escrow bundle. `task configure` stops, naming the
+#     file, if one is missing or is a public key:
+#       tenants/<name>.age.key      the tenant's own age identity
+#       tenants/<name>.deploy.key   read-only deploy key, for Flux
+#       tenants/<name>.write.key    kind: agent only — im's write deploy key
+#
+# Fields (only name, repository and kind are required):
+#   name          DNS label. Also the namespace when `namespaces` is left out,
+#                 and the suffix of every tenant-<name> object. Cannot be a
+#                 namespace the platform uses (claudecode, flux-system, …).
+#   repository    owner/repo — company-held and private.
+#   kind          vendor  a third party, added to the repo as a collaborator
+#                 agent   written by this cluster's own im. At most ONE per
+#                         cluster, and its name must be `im-apps`: im's own
+#                         instructions (k8scc im-policy.md) refer to the
+#                         Kustomization `tenant-im-apps`. im gets this repo's
+#                         write key and its name (IM_APPS_REPO). After the
+#                         first apply, restart im
+#                         (`kubectl -n claudecode rollout restart deploy/im`) —
+#                         a running im does not see a Secret created later.
+#   namespaces    default [<name>]. Unique across all entries; none of the
+#                 platform's.
+#   branch        default "main".
+#   quota         cpu / memory / pods per namespace; defaults "4" / "8Gi" / 50.
+#   grants        privileges, ALL OFF by default. There is no pod-security
+#                 field: the level follows from the grants.
+#     baseline      PSA baseline instead of restricted.
+#     host_network  PSA privileged. ⚠️ A host_network tenant is NOT isolated:
+#                   network policy does not apply to it and it can bind any
+#                   port on the node. Grant only to a vendor you would give a
+#                   node to.
+#     lan_ip        N LoadBalancer addresses on the LAN, from the tenant's own
+#                   pool, set with `lan_ip_range` below. Requires a narrowed
+#                   shared pool (the gateway addresses in §1 declared) and is
+#                   refused on an appliance. The tenant's LoadBalancer Services
+#                   must carry the label `jg.tenant: <name>` and set
+#                   `allocateLoadBalancerNodePorts: false` (NodePorts are
+#                   capped at 0).
+#     l2, devices   refused for now: the platform components are not shipped
+#                   (ferry133/jg-base#187, #188).
+#   lan_ip_range  {start, stop}: at least `lan_ip` addresses, outside the
+#                 shared LoadBalancer pool and every other tenant's range.
+#                 `task configure` refuses an overlap, naming both ranges.
+#
+# ⚠️ Removing an entry is destructive: Flux prunes the tenant's namespaces and
+# everything in them, PVCs included. Use fleet-ops' `tenant-repo-revoke`
+# skill, which lists the PVCs and asks first.
+#
+# app_repos:
+#   - name: acme
+#     repository: your-org/acme-app
+#     kind: vendor
+#     namespaces: [acme, acme-db]
+#     grants:
+#       baseline: true
+#       lan_ip: 1
+#     lan_ip_range: {start: "10.9.x.200", stop: "10.9.x.200"}
+#   - name: im-apps
+#     repository: your-org/your-cluster-im-apps
+#     kind: agent

@@ -1,0 +1,10 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: im-apps
+  labels:
+    # Derived from grants in plugin.py, never declared (design D9). The tenant
+    # cannot change it: tenant-admin has no verbs on Namespace.
+    pod-security.kubernetes.io/enforce: restricted
+    jg.tenant: im-apps

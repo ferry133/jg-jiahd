@@ -365,3 +365,68 @@ spec:
         kind: Secret
   dependsOn:
     - name: cluster-apps-base
+---
+# ── cluster-tenants — namespace-level objects and Secrets for every tenant ──
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: cluster-tenants
+  namespace: flux-system
+spec:
+  decryption:
+    provider: sops
+  deletionPolicy: WaitForTermination
+  interval: 1h
+  path: ./kubernetes/tenants
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  dependsOn:
+    - name: cluster-apps-base
+---
+# ── tenant im-apps (agent: ferry133/jg-jiahd-im-apps) ──
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tenant-im-apps
+  namespace: flux-system
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: tenant-im-apps
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: "ssh://git@github.com/ferry133/jg-jiahd-im-apps.git"
+  ref:
+    # Quoted for the reason the jg-base GitRepository above gives.
+    branch: "main"
+  # Read-only deploy key, rendered by cluster-tenants (task 3.4), same keys as
+  # the root sync's github-deploy-key: identity, known_hosts.
+  secretRef:
+    name: tenant-im-apps-git-auth
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: tenant-im-apps
+  namespace: flux-system
+spec:
+  serviceAccountName: tenant-im-apps
+  decryption:
+    provider: sops
+    secretRef:
+      name: tenant-im-apps-sops-age
+  deletionPolicy: WaitForTermination
+  interval: 1h
+  path: ./
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: tenant-im-apps
+    namespace: flux-system
+  dependsOn:
+    - name: cluster-tenants

@@ -94,3 +94,20 @@ cloudflare-tunnel.json*
 # Anthropic API key.
 .env
 .env.*
+
+# Tenant credentials (jgct#214 task 3.5, fleet-ops root `standalone-app-repos`).
+# The provisioning skill keeps each tenant's private age key and its deploy
+# key(s) here, in the user repo directory and out of git; what IS committed is
+# their sops-encrypted form under kubernetes/tenants/.
+#
+# The whole directory, not `tenants/*.key*`: the deploy key's file name is the
+# skill's choice and `ssh-keygen -f tenants/acme` writes `acme` and `acme.pub`,
+# which no extension rule matches. Every file in here is a credential or its
+# public half, so the directory is what is protected.
+#
+# Anchored with a leading `/`: an unanchored `tenants/` would also match
+# `kubernetes/tenants/` — the encrypted Secrets Flux must see — and a
+# directory rule cannot be undone by `!*.j2` or any other negation.
+# `tenants*` for the same reason as the suffix globs below: `cp -r tenants
+# tenants.bak` is what a hand-made backup looks like.
+/tenants*/

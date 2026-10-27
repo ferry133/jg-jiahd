@@ -212,9 +212,6 @@ spec:
               - op: add
                 path: /spec/dnsNames/-
                 value: "*.im-apps.${SECRET_DOMAIN}"
-              - op: add
-                path: /spec/dnsNames/-
-                value: "*.homeauto.${SECRET_DOMAIN}"
             target:
               group: cert-manager.io
               kind: Certificate
@@ -498,51 +495,6 @@ spec:
   sourceRef:
     kind: GitRepository
     name: tenant-im-apps
-    namespace: flux-system
-  dependsOn:
-    - name: cluster-tenants
----
-# ── tenant homeauto (vendor: ferry133/jg-jiahd-homeauto) ──
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: tenant-homeauto
-  namespace: flux-system
----
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: GitRepository
-metadata:
-  name: tenant-homeauto
-  namespace: flux-system
-spec:
-  interval: 1h
-  url: "ssh://git@github.com/ferry133/jg-jiahd-homeauto.git"
-  ref:
-    # Quoted for the reason the jg-base GitRepository above gives.
-    branch: "main"
-  # Read-only deploy key, rendered by cluster-tenants (task 3.4), same keys as
-  # the root sync's github-deploy-key: identity, known_hosts.
-  secretRef:
-    name: tenant-homeauto-git-auth
----
-apiVersion: kustomize.toolkit.fluxcd.io/v1
-kind: Kustomization
-metadata:
-  name: tenant-homeauto
-  namespace: flux-system
-spec:
-  serviceAccountName: tenant-homeauto
-  decryption:
-    provider: sops
-    secretRef:
-      name: tenant-homeauto-sops-age
-  deletionPolicy: WaitForTermination
-  interval: 1h
-  path: ./
-  prune: true
-  sourceRef:
-    kind: GitRepository
-    name: tenant-homeauto
     namespace: flux-system
   dependsOn:
     - name: cluster-tenants

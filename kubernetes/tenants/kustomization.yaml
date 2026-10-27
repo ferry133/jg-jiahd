@@ -14,4 +14,3 @@ resources:
   - tenant-git-auth.sops.yaml
   - tenant-sops-age.sops.yaml
   - im-apps-write-key.sops.yaml
-  - ha-im-token.sops.yaml

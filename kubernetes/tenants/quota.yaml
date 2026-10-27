@@ -37,3 +37,42 @@ spec:
       defaultRequest:
         cpu: 100m
         memory: 128Mi
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: tenant-quota
+  namespace: homeauto
+spec:
+  hard:
+    # Quoted: a bare 4 or 50 is retyped to an int by whoever parses the file,
+    # and ResourceQuota takes quantities.
+    requests.cpu: "4"
+    requests.memory: "8Gi"
+    pods: "50"
+    # The LAN-IP grant (D9). 0 without one: a tenant with no grant can create
+    # no LoadBalancer Service at all, whatever the pools would do.
+    services.loadbalancers: "0"
+    # A NodePort is LAN presence on every node's address, which no grant
+    # gives. LoadBalancer Services allocate node ports too unless they set
+    # `allocateLoadBalancerNodePorts: false` — Cilium's L2 announcement does
+    # not need them.
+    services.nodeports: "0"
+    # Devices (jg-base#188), 0 without the grant. jg-base's
+    # tenant-device-requests policy refuses the request on the namespace label;
+    # this refuses it on the count.
+    requests.devic.es/serial: "0"
+---
+# Without default requests the quota above rejects every Pod that does not
+# state its own, which reads as the tenant's app being broken.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: tenant-defaults
+  namespace: homeauto
+spec:
+  limits:
+    - type: Container
+      defaultRequest:
+        cpu: 100m
+        memory: 128Mi

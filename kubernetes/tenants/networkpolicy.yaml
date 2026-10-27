@@ -16,3 +16,21 @@ spec:
                 - network
     - fromEntities:
         - host
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: tenant-ingress
+  namespace: homeauto
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchExpressions:
+            - key: k8s:io.kubernetes.pod.namespace
+              operator: In
+              values:
+                - homeauto
+                - network
+    - fromEntities:
+        - host

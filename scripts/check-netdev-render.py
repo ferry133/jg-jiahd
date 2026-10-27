@@ -116,6 +116,9 @@ VETS = [
     ("vet-http", dict(READER, unifi_controller_url="http://192.0.2.1"), False),
     ("vet-two-probes", dict(WRITER, netdev_outside_probes=PROBES[:2]), False),
     ("vet-comma-probe", dict(WRITER, netdev_outside_probes=[PROBES[0] + ",x", *PROBES[1:]]), False),
+    # jgct#252: the server parses the port at import, so a non-numeric one crashloops it
+    ("vet-bad-port", dict(WRITER, netdev_outside_probes=["https://host:abc/x", *PROBES[1:]]), False),
+    ("vet-numeric-port", dict(WRITER, netdev_outside_probes=["https://host:9000/x", *PROBES[1:]]), True),
 ]
 
 

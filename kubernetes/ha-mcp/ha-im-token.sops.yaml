@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ha-im-token
+  namespace: claudecode
+stringData:
+  token: ENC[AES256_GCM,data:46gH1iC/JqIkqfxMvSJBjLIo6xKl1uWdMXIlKvwGkeUBlqVjQFv+nHxfd3vTQ27GU9KbPP9LsvEOtygoMtgKbvjTVmMBMK3Td7Emrf+LEOk66Vp/DMJ4HptDJPYyVjqxtqkMAtRGg5b9NdmYfQlA+/4NhjVYSEP9K+rJKQ3qijNwGGHaod0T6IvyPNJ2HDafmmKzhfppkUnssGETSIH9UlPFcN+wczbiBWvHBgOeZ8lj5IZyd6CQ,iv:40DL3fm7YTsHFdlN2F2lh3154GMwtCn3Wz7vME07eM0=,tag:ZGhIP8B+S5vLDJ7NUmGsiA==,type:str]
+sops:
+  age:
+    - recipient: age1p2v4ph8cc072haxe2m6f2mlk3st6c4vrmqjy0saa32uu9rjqkgpqdpe6yf
+      enc: |
+        -----BEGIN AGE ENCRYPTED FILE-----
+        YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBRZG8xZVBLTzdxSjB0TTdn
+        a2lYU001UFZzTHFOMXZRRlBsUVczZWNBWVFvClJ4R3d5L0lVTStQY241UVFlclBZ
+        cW15a0pLNHNXdzdpSUV0YVJsTWMzWWMKLS0tIEtHL3BRVk9mNWxyTXNMc29LUml1
+        dThENkg4NWpQenNubUErK0ZKT29HTlkKwX2njLEV9A3Bn3YpW8aQ1tXhRAw1M76Z
+        7xo3kCcdIhWgQ1Qruvw35Z6QROSIoMyooNpxTgLwAuxoCA1xOSpn1g==
+        -----END AGE ENCRYPTED FILE-----
+  lastmodified: "2026-10-27T15:09:49Z"
+  mac: ENC[AES256_GCM,data:IehTjY4xdQOjWjKq+BGMb5FP1bT/ErHagwr+k73WLK3eQ55jQsuqYhf4SkQZ9D1ga5PlJl82LNjoslVkFPKXfQo6CwuiJd1s9lVfYJ/Wj9Z+TLQIec5l4CIE8/eovkFk65MSpEsCi7WPAaFn1/w2Ljv1ysnxdUye7iY17PIBF9k=,iv:lPepMY7J84pGVNrCGr6dbDWLofL/y8cSj6Jdxz0d2zk=,tag:ML6cjf7025/qATEDNJRkwA==,type:str]
+  encrypted_regex: ^(data|stringData)$
+  mac_only_encrypted: true
+  version: 3.12.1

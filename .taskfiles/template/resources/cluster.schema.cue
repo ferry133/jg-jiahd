@@ -970,10 +970,12 @@ import (
 		devices?:      {[=~"^[a-z0-9-]+$"]: int & >0}
 	}
 
-	// One netdev_outside_probes target: `https://host/path` or `host:port`
-	// (jg-base#222, the server's contract). No commas -- jg-base receives the
-	// three joined by commas.
-	#NetdevProbe: =~"^(https://[^/\\s,]+/[^\\s,]*|[A-Za-z0-9.-]+:[0-9]{1,5})$"
+	// One netdev_outside_probes target: `https://host[:port]/path` or
+	// `host:port` (jg-base#222, the server's contract). No commas -- jg-base
+	// receives the three joined by commas. A port is digits only: the server
+	// parses it at import, and `https://host:abc/x` crashloops the sidecar
+	// instead of leaving it reader-only (jgct#252).
+	#NetdevProbe: =~"^(https://[^/:\\s,]+(:[0-9]{1,5})?/[^\\s,]*|[A-Za-z0-9.-]+:[0-9]{1,5})$"
 }
 
 #Config

@@ -776,7 +776,8 @@ cluster_name: "xxxxxx"
 #   - "https://<company minio this site can resolve>/minio/health/live"
 #                                                          #   company MinIO
 #   - "1.1.1.1:53"                                         #   public DNS
-# Each probe is `https://host/path` or `host:port`. The MinIO one is per site:
+# Each probe is `https://host[:port]/path` or `host:port`, ports in digits.
+# The MinIO one is per site:
 # pick a name this site's LAN resolves -- minio.janncot.com does not resolve
 # from FAC1's LAN (split horizon), so on a FAC1 cluster use the endpoint its
 # off-site backup already reaches (backup_r2_endpoint, minio.jiahd.cc there).
@@ -1159,14 +1160,16 @@ cluster_name: "xxxxxx"
 #     ha_app: ha                 # HA answers at ha.homeauto.<domain>
 
 # ha_im_token (cluster-level): the long-lived access token of the `im` user in
-# the ha_app tenant's Home Assistant. With it, the im terminal reaches that
-# HA's MCP endpoint at https://<ha_app>.<tenant>.<domain>/api/mcp, the same
-# name the tenant's route serves (no address to fill in: it is derived).
+# this cluster's Home Assistant -- the ha_app tenant's, or the
+# default/home-assistant extra's. With it, the im terminal reaches that HA's
+# MCP endpoint at https://<ha_app>.<tenant>.<domain>/api/mcp for a tenant, or
+# https://ha.<domain>/api/mcp for the extra: the name its route already serves
+# (no address to fill in: it is derived).
 # Leave it out until HA is running -- the token is created inside HA. Do NOT
 # make it by hand: fleet-ops' skill `ha-im-credential` creates the `im` user,
 # turns off the MCP Server integration's `require_admin` (a fresh one is admin
 # only, and im would get 401) and writes the token here.
-# The render refuses a token without an ha_app tenant. The default/home-assistant
-# extra gets no MCP connection yet: it has no tenant route of its own.
+# The render refuses a token with no HA, and a cluster with both an ha_app
+# tenant and the extra: im takes one Home Assistant.
 #
 # ha_im_token: ""

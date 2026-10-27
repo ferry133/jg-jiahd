@@ -741,6 +741,36 @@ spec:
   dependsOn:
     - name: cluster-apps-base
 #% endif %#
+#| ── Home Assistant MCP token (jgct#237) ─────────────────────────────────────
+   Secret ha-im-token in `claudecode`, which jg-base's im mounts at
+   /etc/ha-mcp. Its own Kustomization for netdev's reason above, and not
+   cluster-tenants: the default/home-assistant extra pairs with it too, and an
+   extra-only cluster has no tenants. Rendered only when ha_im_token is set.
+
+   A running im does not see a Secret that first appears later, so the first
+   apply is followed by an im restart (on jg-jcc2 im rolled itself 3 s after
+   the Secret, because HA_MCP_URL changed in the same sync; do not rely on it). #|
+#% if ha_mcp_url %#
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: claude-code-ha-mcp-secret
+  namespace: flux-system
+spec:
+  decryption:
+    provider: sops
+  interval: 1h
+  retryInterval: 5m
+  path: ./kubernetes/ha-mcp
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  dependsOn:
+    - name: cluster-apps-base
+#% endif %#
 #| ── Standalone app repos (tenants) ──────────────────────────────────────────
    jgct#214 task 3.3, fleet-ops root `standalone-app-repos` design D1/D5.
    Rendered only when app_repos is non-empty: with none declared this file must

@@ -23,7 +23,4 @@ resources:
 #% if app_repos | selectattr('kind', 'equalto', 'agent') | list %#
   - im-apps-write-key.sops.yaml
 #% endif %#
-#% if ha_mcp_url %#
-  - ha-im-token.sops.yaml
-#% endif %#
 #% endif %#

@@ -350,20 +350,25 @@ def ha_mcp_config(data: dict) -> None:
     if '\n' in str(token).strip():
         raise ValueError("ha_im_token spans more than one line; it is a single "
                          "long-lived access token.")
-    if not ha:
-        extra = 'default/home-assistant' in (data.get('extras') or [])
+    # The default/home-assistant extra (jg-extras) serves HTTPRoute
+    # `ha.${SECRET_DOMAIN}` on envoy-internal, the same gateway a tenant's
+    # route uses; ferry133 ruled 2026-10-27 that it gets MCP too (jgct#237).
+    extra = 'default/home-assistant' in (data.get('extras') or [])
+    if not ha and not extra:
         raise KeyError(
-            "ha_im_token is set but no app_repos entry declares ha_app, so there "
-            "is no Home Assistant URL for im to use the token against"
-            + (" (the default/home-assistant extra gets none until it has a "
-               "ruled public route -- jgct#237)" if extra else "")
-            + ". Declare ha_app on the tenant that runs HA, or remove the token.")
-    if len(ha) > 1:
+            "ha_im_token is set but neither an app_repos entry declares ha_app "
+            "nor is the default/home-assistant extra listed, so there is no Home "
+            "Assistant URL for im to use the token against. Declare ha_app on "
+            "the tenant that runs HA, list the extra, or remove the token.")
+    if len(ha) + extra > 1:
         raise KeyError(
-            f"app_repos entries {', '.join(r['name'] for r in ha)} all declare "
-            "ha_app; im takes one Home Assistant. Keep ha_app on one of them.")
+            "im takes one Home Assistant, and this cluster has "
+            + ", ".join([f"app_repos entry {r['name']} (ha_app)" for r in ha]
+                        + (["the default/home-assistant extra"] if extra else []))
+            + ". Keep exactly one of them.")
     data['ha_mcp_url'] = (f"https://{ha[0]['ha_app']}.{ha[0]['name']}."
-                          f"{data['cloudflare_domain']}/api/mcp")
+                          f"{data['cloudflare_domain']}/api/mcp" if ha else
+                          f"https://ha.{data['cloudflare_domain']}/api/mcp")
 
 
 # Return the Flux / GitHub push token from github-push-token.txt

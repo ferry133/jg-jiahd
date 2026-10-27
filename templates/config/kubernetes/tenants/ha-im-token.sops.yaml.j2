@@ -1,0 +1,18 @@
+#% if ha_mcp_url %#
+---
+#| jgct#237, jg-base#221/#232: Secret `ha-im-token` in `claudecode`, key
+   `token`. jg-base mounts the whole Secret at /etc/ha-mcp on im's app
+   container (optional, 0400) and sets HA_MCP_TOKEN_FILE=/etc/ha-mcp/token.
+   Here, under cluster-tenants, because the URL it pairs with exists only when
+   an app_repos entry runs HA -- so this directory is always rendered when it
+   is -- and because cluster-tenants already applies im-apps-write-key into the
+   same namespace after cluster-apps-base. Like that key, an im already running
+   when this first appears does not see it: restart im after the first apply. #|
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ha-im-token
+  namespace: claudecode
+stringData:
+  token: #{ ha_im_token | trim | tojson }#
+#% endif %#

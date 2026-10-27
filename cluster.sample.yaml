@@ -742,6 +742,49 @@ cluster_name: "xxxxxx"
 #     ...
 
 
+# ── The site's UniFi console (optional) — netdev-mcp on the base im ───────────
+# Gives the agent a read view of THIS site's UniFi network (devices, clients,
+# networks, Wi-Fi), through its own sidecar next to the terminal: the key
+# below is mounted there and nowhere else -- not in the terminal, which is the
+# customer's root shell. Leave the whole section commented out on a site
+# without a UniFi console; nothing changes for such a cluster.
+#
+# Recording the console moves the base im onto jg-base's `im/netdev` path
+# (the same release plus the sidecar). Remove these fields again and it
+# returns to `im/enabled`, deleting the sidecar's snapshot volume with it.
+#
+# Reader -- all three, or none:
+# unifi_controller_url: "https://10.9.1.1"   # https only; the sidecar has no http mode
+# unifi_ca_cert: |                           # the console's certificate, or its CA, as PEM
+#   -----BEGIN CERTIFICATE-----
+#   ...
+#   -----END CERTIFICATE-----
+# unifi_reader_key: ""                       # the console's Integration API key (read-only)
+# unifi_site: "default"                      # only for a site other than `default`
+#
+# Writer -- the agent may also CHANGE the network, after the person at the
+# terminal confirms each change, filing a ticket and taking a snapshot first.
+# All five, or none; and only on top of the reader above. Leave these out
+# until the operator company says this site gets them: a throwaway cluster
+# first, an existing site only after a reader-only week and ferry133's nod.
+# unifi_operator_user: ""        # a RESTRICTED local admin on the console, not the owner
+# unifi_operator_password: ""
+# im_fac_ticket_repo: ""         # owner/repo, the private repo the tickets go to
+# im_fac_ticket_token: ""        # can only open, comment on and close issues THERE
+# netdev_outside_probes:         # exactly three, on three different paths:
+#   - "https://api.github.com/zen"                         #   GitHub API
+#   - "https://<company minio this site can resolve>/minio/health/live"
+#                                                          #   company MinIO
+#   - "1.1.1.1:53"                                         #   public DNS
+# Each probe is `https://host/path` or `host:port`. The MinIO one is per site:
+# pick a name this site's LAN resolves -- minio.janncot.com does not resolve
+# from FAC1's LAN (split horizon), so on a FAC1 cluster use the endpoint its
+# off-site backup already reaches (backup_r2_endpoint, minio.jiahd.cc there).
+#
+# The render refuses a half-set group, a writer without a reader, and a console
+# on a cluster with claudecode_auth0: false (there is no base im to join).
+
+
 # ── extras/factory/factory — provisioning credentials (one cluster only) ──────
 # Consumed by jg-base `kubernetes/apps/extras/factory/factory/app/
 # credentials-secret.yaml`. Set these ONLY on the cluster that hosts factory
@@ -845,7 +888,8 @@ cluster_name: "xxxxxx"
 #                                  trello_api_key, trello_api_token,
 #                                  linebot_auth0_* (3), linebot_admin_session_secret (all four required)
 #   default/mariadb              → mariadb_lb_ip
-#   default/mqtt                 → mqtt_lb_ip
+#   default/mqtt                 → mqtt_lb_ip (not on appliance: it uses lan_shared_addr,
+#                                  and the schema refuses mqtt_lb_ip there)
 #   default/postgres             → postgres_password
 #   default/synophoto            → synophoto_auth0_* (3),
 #                                  synophoto_allowed_emails, synophoto_flask_secret_key,
@@ -894,6 +938,9 @@ cluster_name: "xxxxxx"
 # Every *_lb_ip below is added to this cluster's LoadBalancer pool. The pool
 # contains only the addresses listed here plus the three gateway addresses in
 # §1 — an address that is not listed is one the Service cannot be given.
+#
+# Not on appliance: there mqtt shares lan_shared_addr (§1), and `task configure`
+# refuses mqtt_lb_ip with "does not satisfy matchN". Leave it out.
 # mqtt_lb_ip: "10.9.x.x"
 
 # ── default/trello-notifier ───────────────────────────────────────────────────
@@ -1011,6 +1058,10 @@ cluster_name: "xxxxxx"
 #   namespaces    default [<name>]. Unique across all entries; none of the
 #                 platform's.
 #   branch        default "main".
+#   ha_app        the label of this tenant's Home Assistant app, when it runs
+#                 one, e.g. `ha` for ha.<name>.<domain>. At most one tenant.
+#                 With ha_im_token (below) the cluster's im terminal can use
+#                 that Home Assistant; without it nothing changes.
 #   quota         cpu / memory / pods per namespace; defaults "4" / "8Gi" / 50.
 #   grants        privileges, ALL OFF by default. There is no pod-security
 #                 field: the level follows from the grants.
@@ -1026,11 +1077,58 @@ cluster_name: "xxxxxx"
 #                   must carry the label `jg.tenant: <name>` and set
 #                   `allocateLoadBalancerNodePorts: false` (NodePorts are
 #                   capped at 0).
-#     l2, devices   refused for now: the platform components are not shipped
-#                   (ferry133/jg-base#187, #188).
+#     l2            the tenant's pods may join the LAN directly with a
+#                   second interface (Multus + macvlan), for software that
+#                   finds devices by broadcast or multicast — HomeKit, mDNS,
+#                   UPnP. Needs `l2_network` below and the cluster-level
+#                   `lan_routed_cidrs`. Turning it on also switches Multus on
+#                   for the whole cluster. ⚠️ Network policy does NOT apply to
+#                   that second interface: anything on the LAN can reach the
+#                   pod there, and the pod can reach anything on the LAN.
+#                   Connections the pod opens itself leave through the
+#                   cluster (the node's address), not the LAN interface;
+#                   software a device must see as the LAN address has to
+#                   bind that address as its source.
+#                   A pod asks for one address by name, in the tenant's FIRST
+#                   namespace only:
+#                     metadata.annotations:
+#                       k8s.v1.cni.cncf.io/networks: lan-10-9-x-20
+#     devices       {<class>: <count>}: the tenant's pods may request that
+#                   many of a device class in EACH of its namespaces, e.g.
+#                   {serial: 1} for a Zigbee / Z-Wave stick or a USB serial
+#                   adapter (/dev/ttyUSB*, /dev/ttyACM*). The only class today
+#                   is `serial`. A pod asks for one with
+#                     resources.limits: {devic.es/serial: 1}
+#                   and gets the device without privileged or hostPath; it is
+#                   scheduled only onto a node that has one plugged in.
+#                   Turning it on also switches the device plugin on for the
+#                   whole cluster.
 #   lan_ip_range  {start, stop}: at least `lan_ip` addresses, outside the
 #                 shared LoadBalancer pool and every other tenant's range.
 #                 `task configure` refuses an overlap, naming both ranges.
+#   l2_network    {interface, start, stop}: required with `grants.l2`. One
+#                 named address per IP in the range, at most 16.
+#                   interface  the node network card on node_cidr, e.g. enp1s0
+#                              (`talosctl get links`). Every node a tenant pod
+#                              can run on must have a card by that name.
+#                   start/stop inside node_cidr and OUTSIDE the router's DHCP
+#                              pool — `task configure` cannot see the DHCP
+#                              pool, so check it in the router. It refuses a
+#                              range that holds the gateway, a node, the
+#                              network or broadcast address, a LoadBalancer
+#                              address or another tenant's range, and on an
+#                              appliance anything from .200 up (where the
+#                              appliance looks for its own addresses).
+#
+# lan_routed_cidrs (cluster-level, not per tenant): every OTHER subnet the
+# customer's router connects to this LAN, e.g. a separate Wi-Fi or office
+# segment. Required as soon as any tenant holds `grants.l2`; write [] when the
+# LAN is a single subnet. A device on a subnet left out here can reach the
+# tenant's pod but never gets an answer, and nothing reports it. Replies go
+# back through node_default_gateway. Check from a machine on the LAN with
+# `scripts/delivery-check.py l2-route --node <node address>`.
+#
+# lan_routed_cidrs: ["10.9.y.0/24"]
 #
 # ⚠️ Removing an entry is destructive: Flux prunes the tenant's namespaces and
 # everything in them, PVCs included. Use fleet-ops' `tenant-repo-revoke`
@@ -1044,7 +1142,31 @@ cluster_name: "xxxxxx"
 #     grants:
 #       baseline: true
 #       lan_ip: 1
+#       devices: {serial: 1}
 #     lan_ip_range: {start: "10.9.x.200", stop: "10.9.x.200"}
+#   - name: homekit
+#     repository: your-org/homekit-bridge
+#     kind: vendor
+#     grants:
+#       l2: true
+#     l2_network: {interface: enp1s0, start: "10.9.x.20", stop: "10.9.x.21"}
 #   - name: im-apps
 #     repository: your-org/your-cluster-im-apps
 #     kind: agent
+#   - name: homeauto
+#     repository: your-org/home-automation
+#     kind: vendor
+#     ha_app: ha                 # HA answers at ha.homeauto.<domain>
+
+# ha_im_token (cluster-level): the long-lived access token of the `im` user in
+# the ha_app tenant's Home Assistant. With it, the im terminal reaches that
+# HA's MCP endpoint at https://<ha_app>.<tenant>.<domain>/api/mcp, the same
+# name the tenant's route serves (no address to fill in: it is derived).
+# Leave it out until HA is running -- the token is created inside HA. Do NOT
+# make it by hand: fleet-ops' skill `ha-im-credential` creates the `im` user,
+# turns off the MCP Server integration's `require_admin` (a fresh one is admin
+# only, and im would get 401) and writes the token here.
+# The render refuses a token without an ha_app tenant. The default/home-assistant
+# extra gets no MCP connection yet: it has no tenant route of its own.
+#
+# ha_im_token: ""

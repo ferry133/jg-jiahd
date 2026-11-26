@@ -1137,6 +1137,41 @@ class Plugin(makejinja.plugin.Plugin):
         # resolved value.
         data.setdefault('claudecode_config_storage_class',
                         data['db_storage_class'])
+        # Whether nfs-subdir runs (jgct#277; ferry133 2026-11-26, option A).
+        # storage_backend used to be the only input, so an NFS cluster whose NAS
+        # is gone could stop the provisioner only by changing storage_backend --
+        # which also moves the default class (measured by fleet-ops-02 on
+        # jg-jiahd: longhorn -> local-path). This switch suspends the
+        # provisioner and changes nothing else: DEFAULT_STORAGE_CLASS stays
+        # sc-nas, the *_IS_DEFAULT keys stay as storage_backend sets them.
+        #
+        # So with it off, sc-nas is a class nothing provides. Refused while
+        # anything this render places resolves to it; a PVC some other app
+        # creates from ${DEFAULT_STORAGE_CLASS} is not visible here and would
+        # sit Pending -- that is the cost of not moving the default, and moving
+        # the default under live claims is the migration option B was.
+        _nfs_prov = data.get('nfs_provisioner', True)
+        if not isinstance(_nfs_prov, bool):
+            raise ValueError("nfs_provisioner must be true or false.")
+        if 'nfs_provisioner' in data and _backend != 'nfs':
+            raise KeyError(
+                f"nfs_provisioner is set but storage_backend is {_backend!r}: "
+                "nfs-subdir runs only on an NFS cluster, so the field would "
+                "change nothing. Remove it.")
+        data['nfs_provisioner_enabled'] = _backend == 'nfs' and _nfs_prov
+        if _backend == 'nfs' and not _nfs_prov:
+            _on_nas = [f for f in ('db_storage_class',
+                                   'claudecode_workspace_storage_class',
+                                   'claudecode_config_storage_class')
+                       if data.get(f) == 'sc-nas']
+            if _on_nas:
+                raise KeyError(
+                    f"nfs_provisioner is false, but {', '.join(_on_nas)} "
+                    "resolves to sc-nas, which nothing would provide: a new "
+                    "claim would sit Pending while every Kustomization reads "
+                    "Ready. Name a block class for each (it must match the "
+                    "live claim; storageClassName is immutable), or leave the "
+                    "provisioner on.")
         # explicit-memory PostgreSQL moved into jg-base as a base app (jgct#85).
         # UNCONDITIONAL -- every default im has memory regardless of auth0, so
         # this is here and NOT inside `if claudecode_auth0_enabled` (where a

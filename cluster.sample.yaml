@@ -466,6 +466,19 @@ cluster_name: "xxxxxx"
 # `nas_path: incomplete value !=""`）。jgct#157 之前是 0 行指名，原因與上面那格相同。
 # nas_server: "10.x.x.x"                # storage_backend=nfs 時必填，取消註解
 # nas_path: "/volume/path"              # storage_backend=nfs 時必填，取消註解 · NFS export (sc-nas)
+#
+# nfs_provisioner (NFS clusters only · default true): false stops nfs-subdir,
+# the provisioner behind sc-nas, and changes nothing else (jgct#277). For a
+# cluster whose NAS is gone: the default class and the NAS_* settings stay, so
+# set it instead of changing storage_backend, which also moves the default
+# class under live claims. Refused when anything the template places
+# (db_storage_class, the claude-code workspace or config class) is still
+# sc-nas. A claim some other app makes from the default class would sit
+# Pending. Suspending does not uninstall: delete the HelmRelease
+# first-nfs-subdir-external-provisioner (namespace storage) and the StorageClass
+# sc-nas by hand once.
+#
+# nfs_provisioner: true
 # ⚠️ nas_coding_path is UNCONSUMED as of the removal of the claude-code `coding`
 # mount. It still renders into cluster-secrets as NAS_CODING_PATH and nothing
 # reads it. Kept so existing cluster.yaml files keep validating.

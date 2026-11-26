@@ -167,6 +167,13 @@ spec:
 #|   nfs-subdir provisions from a NAS this cluster does not have. #|
 #% set _ = _disabled.append(('nfs-client-provisioner', 'storage_backend is ' ~ storage_backend ~ ', so there is no NAS to provision from')) %#
 #% endif %#
+#% if storage_backend == 'nfs' and not nfs_provisioner_enabled %#
+#|   nfs-subdir on an NFS cluster that says its NAS is gone (jgct#277). Only
+     the provisioner: the default class and the NAS_* keys stay. Suspending
+     stops reconciliation; the HelmRelease, Deployment and StorageClass it
+     already installed stay until deleted by hand. #|
+#% set _ = _disabled.append(('nfs-client-provisioner', 'nfs_provisioner is false, so sc-nas is not provisioned on this NFS cluster')) %#
+#% endif %#
 #% if not deploy_longhorn %#
 #|   Longhorn is heavier than the other provisioners and, unlike them, does not
      work at all until every node carries the iscsi-tools and util-linux-tools

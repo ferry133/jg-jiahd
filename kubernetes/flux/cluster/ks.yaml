@@ -119,11 +119,7 @@ spec:
       target:
         group: kustomize.toolkit.fluxcd.io
         kind: Kustomization
-    # HAND-WRITTEN, not rendered — `task configure` will DROP this entry; put it back.
-    # nfs-subdir is switched off: its NAS (10.9.2.13) is gone since the 2026-10-28 incident, the
-    # pod could only fail its mount, and no PVC uses sc-nas (ferry133 2026-11-25 console:
-    # "2. remove"). Not done with storage_backend: that would also move the cluster default
-    # class from longhorn to local-path. The HelmRelease was deleted by hand. — fleet-ops-02 [e3795b]
+    # suspended: nfs_provisioner is false, so sc-nas is not provisioned on this NFS cluster
     - patch: |-
         apiVersion: kustomize.toolkit.fluxcd.io/v1
         kind: Kustomization

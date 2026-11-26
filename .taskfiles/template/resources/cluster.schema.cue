@@ -43,6 +43,14 @@ import (
 	//                fleet-ops docs/operations/replicated-storage.md
 	storage_backend: "local-path" | "nfs" | "replicated"
 
+	// Whether nfs-subdir (the sc-nas provisioner) runs on an NFS cluster
+	// (jgct#277). Absent means true. false keeps storage_backend "nfs" -- the
+	// default class, the NAS_* keys and everything else stay as they are -- and
+	// only suspends the provisioner, for a cluster whose NAS is gone. plugin.py
+	// refuses it on any other backend, and refuses false while anything this
+	// render places still resolves to sc-nas.
+	nfs_provisioner?: bool
+
 	// An appliance has no NAS to configure and nobody to configure it. It is
 	// also a single node, where replication has nothing to replicate onto.
 	if deployment_profile == "appliance" {
